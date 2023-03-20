@@ -701,11 +701,13 @@ bool GDScript::_update_exports(bool *r_err, bool p_recursive_call, PlaceHolderSc
 
 				switch (member.type) {
 					case GDScriptParser::ClassNode::Member::VARIABLE: {
-						if (!member.variable->exported) {
-							continue;
+						if (member.variable->exported) {
+							members_cache.push_back(member.variable->export_info);
+						} else {
+							GDScriptParser::DataType variable_type = member.variable->get_datatype();
+							members_cache.push_back(PropertyInfo(variable_type.builtin_type, member.variable->identifier->name, PROPERTY_HINT_NONE, String(), PROPERTY_USAGE_SCRIPT_VARIABLE));
 						}
 
-						members_cache.push_back(member.variable->export_info);
 						Variant default_value = analyzer.make_variable_default_value(member.variable);
 						member_default_values_cache[member.variable->identifier->name] = default_value;
 					} break;

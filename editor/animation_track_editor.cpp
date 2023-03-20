@@ -517,9 +517,7 @@ void AnimationTrackKeyEdit::_get_property_list(List<PropertyInfo> *p_list) const
 			Variant v = animation->track_get_key_value(track, key);
 
 			if (hint.type != Variant::NIL) {
-				PropertyInfo pi = hint;
-				pi.name = PNAME("value");
-				p_list->push_back(pi);
+				p_list->push_back(PropertyInfo(hint.type, PNAME("value")));
 			} else {
 				PropertyHint val_hint = PROPERTY_HINT_NONE;
 				String val_hint_string;
