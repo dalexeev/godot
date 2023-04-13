@@ -1287,6 +1287,8 @@ private:
 	bool is_ignoring_warnings = false;
 	List<GDScriptWarning> warnings;
 	HashSet<GDScriptWarning::Code> ignored_warnings;
+	HashSet<int> script_ignored_warning_lines[GDScriptWarning::WARNING_MAX];
+	HashMap<GDScriptWarning::Code, int> script_ignored_warning_start_lines;
 	HashSet<int> unsafe_lines;
 #endif
 
@@ -1317,7 +1319,7 @@ private:
 			FUNCTION = 1 << 5,
 			STATEMENT = 1 << 6,
 			STANDALONE = 1 << 7,
-			CLASS_LEVEL = CLASS | VARIABLE | FUNCTION,
+			CLASS_LEVEL = CLASS | VARIABLE | CONSTANT | SIGNAL | FUNCTION,
 		};
 		uint32_t target_kind = 0; // Flags.
 		AnnotationAction apply = nullptr;
@@ -1433,7 +1435,8 @@ private:
 	bool export_annotations(const AnnotationNode *p_annotation, Node *p_target);
 	template <PropertyUsageFlags t_usage>
 	bool export_group_annotations(const AnnotationNode *p_annotation, Node *p_target);
-	bool warning_annotations(const AnnotationNode *p_annotation, Node *p_target);
+	bool warning_ignore_annotation(const AnnotationNode *p_annotation, Node *p_target);
+	bool warning_ignore_region_annotations(const AnnotationNode *p_annotation, Node *p_target);
 	bool rpc_annotation(const AnnotationNode *p_annotation, Node *p_target);
 	bool static_unload_annotation(const AnnotationNode *p_annotation, Node *p_target);
 	// Statements.

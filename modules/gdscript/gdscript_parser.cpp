@@ -110,7 +110,9 @@ GDScriptParser::GDScriptParser() {
 	register_annotation(MethodInfo("@export_group", PropertyInfo(Variant::STRING, "name"), PropertyInfo(Variant::STRING, "prefix")), AnnotationInfo::STANDALONE, &GDScriptParser::export_group_annotations<PROPERTY_USAGE_GROUP>, varray(""));
 	register_annotation(MethodInfo("@export_subgroup", PropertyInfo(Variant::STRING, "name"), PropertyInfo(Variant::STRING, "prefix")), AnnotationInfo::STANDALONE, &GDScriptParser::export_group_annotations<PROPERTY_USAGE_SUBGROUP>, varray(""));
 	// Warning annotations.
-	register_annotation(MethodInfo("@warning_ignore", PropertyInfo(Variant::STRING, "warning")), AnnotationInfo::CLASS | AnnotationInfo::VARIABLE | AnnotationInfo::SIGNAL | AnnotationInfo::CONSTANT | AnnotationInfo::FUNCTION | AnnotationInfo::STATEMENT, &GDScriptParser::warning_annotations, varray(), true);
+	register_annotation(MethodInfo("@warning_ignore", PropertyInfo(Variant::STRING, "warning")), AnnotationInfo::CLASS_LEVEL | AnnotationInfo::STATEMENT, &GDScriptParser::warning_ignore_annotation, varray(), true);
+	register_annotation(MethodInfo("@warning_ignore_start", PropertyInfo(Variant::STRING, "warning")), AnnotationInfo::STANDALONE, &GDScriptParser::warning_ignore_region_annotations, varray(), true);
+	register_annotation(MethodInfo("@warning_ignore_restore", PropertyInfo(Variant::STRING, "warning")), AnnotationInfo::STANDALONE, &GDScriptParser::warning_ignore_region_annotations, varray(), true);
 	// Networking.
 	register_annotation(MethodInfo("@rpc", PropertyInfo(Variant::STRING, "mode"), PropertyInfo(Variant::STRING, "sync"), PropertyInfo(Variant::STRING, "transfer_mode"), PropertyInfo(Variant::INT, "transfer_channel")), AnnotationInfo::FUNCTION, &GDScriptParser::rpc_annotation, varray("authority", "call_remote", "unreliable", 0), true);
 
@@ -154,6 +156,7 @@ void GDScriptParser::push_error(const String &p_message, const Node *p_origin) {
 #ifdef DEBUG_ENABLED
 void GDScriptParser::push_warning(const Node *p_source, GDScriptWarning::Code p_code, const Vector<String> &p_symbols) {
 	ERR_FAIL_COND(p_source == nullptr);
+	ERR_FAIL_INDEX(p_code, GDScriptWarning::WARNING_MAX);
 	if (is_ignoring_warnings) {
 		return;
 	}
@@ -162,6 +165,12 @@ void GDScriptParser::push_warning(const Node *p_source, GDScriptWarning::Code p_
 	}
 
 	if (ignored_warnings.has(p_code)) {
+		return;
+	}
+	if (script_ignored_warning_lines[p_code].has(p_source->start_line)) {
+		return;
+	}
+	if (script_ignored_warning_start_lines.has(p_code) && p_source->start_line > script_ignored_warning_start_lines.get(p_code)) {
 		return;
 	}
 
@@ -488,14 +497,24 @@ void GDScriptParser::parse_program() {
 
 	while (!check(GDScriptTokenizer::Token::TK_EOF)) {
 		if (match(GDScriptTokenizer::Token::ANNOTATION)) {
-			AnnotationNode *annotation = parse_annotation(AnnotationInfo::SCRIPT | AnnotationInfo::STANDALONE | AnnotationInfo::CLASS_LEVEL);
+			AnnotationNode *annotation = parse_annotation(AnnotationInfo::SCRIPT | AnnotationInfo::CLASS_LEVEL | AnnotationInfo::STANDALONE);
 			if (annotation != nullptr) {
 				if (annotation->applies_to(AnnotationInfo::SCRIPT)) {
-					// `@icon` needs to be applied in the parser. See GH-72444.
 					if (annotation->name == SNAME("@icon")) {
+						// Some annotations need to be resolved and applied in the parser.
 						annotation->apply(this, head);
 					} else {
 						head->annotations.push_back(annotation);
+					}
+				} else if (annotation->applies_to(AnnotationInfo::STANDALONE)) {
+					if (previous.type != GDScriptTokenizer::Token::NEWLINE) {
+						push_error(R"(Expected newline after a standalone annotation.)");
+					}
+					if (annotation->name == SNAME("@warning_ignore_start") || annotation->name == SNAME("@warning_ignore_restore")) {
+						// Some annotations need to be resolved and applied in the parser.
+						annotation->apply(this, nullptr);
+					} else {
+						push_error(R"(Unexpected standalone annotation.)");
 					}
 				} else {
 					annotation_stack.push_back(annotation);
@@ -841,8 +860,8 @@ void GDScriptParser::parse_class_body(bool p_is_multiline) {
 			case GDScriptTokenizer::Token::ANNOTATION: {
 				advance();
 
-				// Check for standalone and class-level annotations.
-				AnnotationNode *annotation = parse_annotation(AnnotationInfo::STANDALONE | AnnotationInfo::CLASS_LEVEL);
+				// Check for class-level and standalone annotations.
+				AnnotationNode *annotation = parse_annotation(AnnotationInfo::CLASS_LEVEL | AnnotationInfo::STANDALONE);
 				if (annotation != nullptr) {
 					if (annotation->applies_to(AnnotationInfo::STANDALONE)) {
 						if (previous.type != GDScriptTokenizer::Token::NEWLINE) {
@@ -850,9 +869,11 @@ void GDScriptParser::parse_class_body(bool p_is_multiline) {
 						}
 						if (annotation->name == SNAME("@export_category") || annotation->name == SNAME("@export_group") || annotation->name == SNAME("@export_subgroup")) {
 							current_class->add_member_group(annotation);
+						} else if (annotation->name == SNAME("@warning_ignore_start") || annotation->name == SNAME("@warning_ignore_restore")) {
+							// Some annotations need to be resolved and applied in the parser.
+							annotation->apply(this, nullptr);
 						} else {
-							// For potential non-group standalone annotations.
-							push_error(R"(Unexpected standalone annotation in class body.)");
+							push_error(R"(Unexpected standalone annotation.)");
 						}
 					} else {
 						annotation_stack.push_back(annotation);
@@ -1696,9 +1717,21 @@ GDScriptParser::Node *GDScriptParser::parse_statement() {
 		case GDScriptTokenizer::Token::ANNOTATION: {
 			advance();
 			is_annotation = true;
-			AnnotationNode *annotation = parse_annotation(AnnotationInfo::STATEMENT);
+			AnnotationNode *annotation = parse_annotation(AnnotationInfo::STATEMENT | AnnotationInfo::STANDALONE);
 			if (annotation != nullptr) {
-				annotation_stack.push_back(annotation);
+				if (annotation->applies_to(AnnotationInfo::STANDALONE)) {
+					if (previous.type != GDScriptTokenizer::Token::NEWLINE) {
+						push_error(R"(Expected newline after a standalone annotation.)");
+					}
+					if (annotation->name == SNAME("@warning_ignore_start") || annotation->name == SNAME("@warning_ignore_restore")) {
+						// Some annotations need to be resolved and applied in the parser.
+						annotation->apply(this, nullptr);
+					} else {
+						push_error(R"(Unexpected standalone annotation.)");
+					}
+				} else {
+					annotation_stack.push_back(annotation);
+				}
 			}
 			break;
 		}
@@ -3692,23 +3725,25 @@ bool GDScriptParser::validate_annotation_arguments(AnnotationNode *p_annotation)
 		return false;
 	}
 
-	// `@icon`'s argument needs to be resolved in the parser. See GH-72444.
-	if (p_annotation->name == SNAME("@icon")) {
-		ExpressionNode *argument = p_annotation->arguments[0];
+	// Some annotations need to be resolved and applied in the parser.
+	if (p_annotation->name == SNAME("@icon") || p_annotation->name == SNAME("@warning_ignore_start") || p_annotation->name == SNAME("@warning_ignore_restore")) {
+		for (int i = 0; i < p_annotation->arguments.size(); i++) {
+			ExpressionNode *argument = p_annotation->arguments[i];
 
-		if (argument->type != Node::LITERAL) {
-			push_error(R"(Argument 1 of annotation "@icon" must be a string literal.)", argument);
-			return false;
+			if (argument->type != Node::LITERAL) {
+				push_error(vformat(R"(Argument %d of annotation "%s" must be a string literal.)", i + 1, p_annotation->name), argument);
+				return false;
+			}
+
+			Variant value = static_cast<LiteralNode *>(argument)->value;
+
+			if (value.get_type() != Variant::STRING) {
+				push_error(vformat(R"(Argument %d of annotation "%s" must be a string literal.)", i + 1, p_annotation->name), argument);
+				return false;
+			}
+
+			p_annotation->resolved_arguments.push_back(value);
 		}
-
-		Variant value = static_cast<LiteralNode *>(argument)->value;
-
-		if (value.get_type() != Variant::STRING) {
-			push_error(R"(Argument 1 of annotation "@icon" must be a string literal.)", argument);
-			return false;
-		}
-
-		p_annotation->resolved_arguments.push_back(value);
 	}
 
 	// For other annotations, see `GDScriptAnalyzer::resolve_annotation()`.
@@ -4034,7 +4069,7 @@ bool GDScriptParser::export_group_annotations(const AnnotationNode *p_annotation
 	return true;
 }
 
-bool GDScriptParser::warning_annotations(const AnnotationNode *p_annotation, Node *p_node) {
+bool GDScriptParser::warning_ignore_annotation(const AnnotationNode *p_annotation, Node *p_node) {
 #ifdef DEBUG_ENABLED
 	bool has_error = false;
 	for (const Variant &warning_name : p_annotation->resolved_arguments) {
@@ -4044,6 +4079,46 @@ bool GDScriptParser::warning_annotations(const AnnotationNode *p_annotation, Nod
 			has_error = true;
 		} else {
 			p_node->ignored_warnings.push_back(warning);
+		}
+	}
+
+	return !has_error;
+
+#else // ! DEBUG_ENABLED
+	// Only available in debug builds.
+	return true;
+#endif // DEBUG_ENABLED
+}
+
+bool GDScriptParser::warning_ignore_region_annotations(const AnnotationNode *p_annotation, Node *p_node) {
+#ifdef DEBUG_ENABLED
+	bool has_error = false;
+	bool is_start = p_annotation->name == SNAME("@warning_ignore_start");
+	for (const Variant &warning_name : p_annotation->resolved_arguments) {
+		GDScriptWarning::Code warning = GDScriptWarning::get_code_from_name(String(warning_name).to_upper());
+		if (warning == GDScriptWarning::WARNING_MAX) {
+			push_error(vformat(R"(Invalid warning name: "%s".)", warning_name), p_annotation);
+			has_error = true;
+			continue;
+		}
+		if (is_start) {
+			if (script_ignored_warning_start_lines.has(warning)) {
+				push_error(vformat(R"(Warning "%s" is already ignoring.)", warning_name), p_annotation);
+				has_error = true;
+				continue;
+			}
+			script_ignored_warning_start_lines.insert(warning, p_annotation->start_line);
+		} else {
+			if (!script_ignored_warning_start_lines.has(warning)) {
+				push_error(vformat(R"(Warning "%s" is not ignoring.)", warning_name), p_annotation);
+				has_error = true;
+				continue;
+			}
+			int start_line = script_ignored_warning_start_lines.get(warning);
+			script_ignored_warning_start_lines.erase(warning);
+			for (int i = start_line; i <= p_annotation->start_line; i++) {
+				script_ignored_warning_lines[warning].insert(i);
+			}
 		}
 	}
 
