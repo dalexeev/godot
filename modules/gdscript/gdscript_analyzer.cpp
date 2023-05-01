@@ -1273,6 +1273,8 @@ void GDScriptAnalyzer::resolve_class_body(GDScriptParser::ClassNode *p_class, co
 				GDScriptParser::FunctionNode *getter_function = nullptr;
 				GDScriptParser::FunctionNode *setter_function = nullptr;
 
+				int setter_size = 1;
+				int getter_size = 0;
 				bool has_valid_getter = false;
 				bool has_valid_setter = false;
 
@@ -1290,7 +1292,9 @@ void GDScriptAnalyzer::resolve_class_body(GDScriptParser::ClassNode *p_class, co
 							return_datatype.is_meta_type = false;
 						}
 
-						if (getter_function->parameters.size() != 0 || return_datatype.has_no_type()) {
+						getter_size = getter_function->parameters.size();
+						bool has_valid_getter_size = getter_size == 0 || getter_size == 1;
+						if (!has_valid_getter_size || return_datatype.has_no_type()) {
 							push_error(vformat(R"(Function "%s" cannot be used as getter because of its signature.)", getter_function->identifier->name), member.variable);
 						} else if (!is_type_compatible(member.variable->datatype, return_datatype, true)) {
 							push_error(vformat(R"(Function with return type "%s" cannot be used as getter for a property of type "%s".)", return_datatype.to_string(), member.variable->datatype.to_string()), member.variable);
@@ -1314,26 +1318,30 @@ void GDScriptAnalyzer::resolve_class_body(GDScriptParser::ClassNode *p_class, co
 					if (setter_function == nullptr) {
 						push_error(vformat(R"(Setter "%s" not found.)", member.variable->setter_pointer->name), member.variable);
 
-					} else if (setter_function->parameters.size() != 1) {
-						push_error(vformat(R"(Function "%s" cannot be used as setter because of its signature.)", setter_function->identifier->name), member.variable);
-
-					} else if (!is_type_compatible(member.variable->datatype, setter_function->parameters[0]->datatype, true)) {
-						push_error(vformat(R"(Function with argument type "%s" cannot be used as setter for a property of type "%s".)", setter_function->parameters[0]->datatype.to_string(), member.variable->datatype.to_string()), member.variable);
-
 					} else {
-						has_valid_setter = true;
+						setter_size = setter_function->parameters.size();
+						bool has_valid_setter_size = setter_size == 1 || setter_size == 2;
+						if (!has_valid_setter_size) {
+							push_error(vformat(R"(Function "%s" cannot be used as setter because of its signature.)", setter_function->identifier->name), member.variable);
+
+						} else if (!is_type_compatible(member.variable->datatype, setter_function->parameters[setter_size - 1]->datatype, true)) {
+							push_error(vformat(R"(Function with argument type "%s" cannot be used as setter for a property of type "%s".)", setter_function->parameters[setter_size - 1]->datatype.to_string(), member.variable->datatype.to_string()), member.variable);
+
+						} else {
+							has_valid_setter = true;
 
 #ifdef DEBUG_ENABLED
-						if (member.variable->datatype.builtin_type == Variant::FLOAT && setter_function->parameters[0]->datatype.builtin_type == Variant::INT) {
-							parser->push_warning(member.variable, GDScriptWarning::NARROWING_CONVERSION);
-						}
+							if (member.variable->datatype.builtin_type == Variant::FLOAT && setter_function->parameters[setter_size - 1]->datatype.builtin_type == Variant::INT) {
+								parser->push_warning(member.variable, GDScriptWarning::NARROWING_CONVERSION);
+							}
 #endif
+						}
 					}
 				}
 
 				if (member.variable->datatype.is_variant() && has_valid_getter && has_valid_setter) {
-					if (!is_type_compatible(getter_function->datatype, setter_function->parameters[0]->datatype, true)) {
-						push_error(vformat(R"(Getter with type "%s" cannot be used along with setter of type "%s".)", getter_function->datatype.to_string(), setter_function->parameters[0]->datatype.to_string()), member.variable);
+					if (!is_type_compatible(getter_function->datatype, setter_function->parameters[setter_size - 1]->datatype, true)) {
+						push_error(vformat(R"(Getter with type "%s" cannot be used along with setter of type "%s".)", getter_function->datatype.to_string(), setter_function->parameters[setter_size - 1]->datatype.to_string()), member.variable);
 					}
 				}
 #ifdef DEBUG_ENABLED

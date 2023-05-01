@@ -508,7 +508,6 @@ bool GDScript::_update_exports(bool *r_err, bool p_recursive_call, PlaceHolderSc
 		GDScriptParser parser;
 		GDScriptAnalyzer analyzer(&parser);
 		Error err = parser.parse(source, path, false);
-
 		if (err == OK && analyzer.analyze() == OK) {
 			const GDScriptParser::ClassNode *c = parser.get_tree();
 
@@ -896,12 +895,19 @@ bool GDScript::_get(const StringName &p_name, Variant &r_ret) const {
 			{
 				HashMap<StringName, MemberInfo>::ConstIterator E = static_variables_indices.find(p_name);
 				if (E) {
-					if (E->value.getter) {
+					const GDScript::MemberInfo *member = &E->value;
+					if (member->getter) {
+						Variant property_name = p_name;
+						Variant *args[1] = { nullptr };
+						if (member->getter_size == 1) {
+							args[0] = &property_name;
+						}
+						// TODO: Throw an error if getter_size isn't 0 or 1?
 						Callable::CallError ce;
-						r_ret = const_cast<GDScript *>(this)->callp(E->value.getter, nullptr, 0, ce);
+						r_ret = const_cast<GDScript *>(this)->callp(member->getter, (const Variant **)args, member->getter_size, ce);
 						return true;
 					}
-					r_ret = static_variables[E->value.index];
+					r_ret = static_variables[member->index];
 					return true;
 				}
 			}
@@ -937,9 +943,18 @@ bool GDScript::_set(const StringName &p_name, const Variant &p_value) {
 					}
 				}
 				if (member->setter) {
-					const Variant *args = &value;
+					Variant property_name = p_name;
+					Variant *args[2] = { nullptr, nullptr };
+					if (member->setter_size == 2) {
+						args[0] = &property_name;
+						args[1] = &value;
+					}
+					// TODO: Throw an error if setter_size isn't 1 or 2?
+					else {
+						args[0] = &value;
+					}
 					Callable::CallError err;
-					callp(member->setter, &args, 1, err);
+					callp(member->setter, (const Variant **)args, member->setter_size, err);
 					return err.error == Callable::CallError::CALL_OK;
 				} else {
 					static_variables.write[member->index] = value;
@@ -1497,9 +1512,18 @@ bool GDScriptInstance::set(const StringName &p_name, const Variant &p_value) {
 				}
 			}
 			if (member->setter) {
-				const Variant *args = &value;
+				Variant property_name = p_name;
+				Variant *args[2] = { nullptr, nullptr };
+				if (member->setter_size == 2) {
+					args[0] = &property_name;
+					args[1] = &value;
+				}
+				// TODO: Throw an error if setter_size isn't 1 or 2?
+				else {
+					args[0] = &value;
+				}
 				Callable::CallError err;
-				callp(member->setter, &args, 1, err);
+				callp(member->setter, (const Variant **)args, member->setter_size, err);
 				return err.error == Callable::CallError::CALL_OK;
 			} else {
 				members.write[member->index] = value;
@@ -1512,8 +1536,8 @@ bool GDScriptInstance::set(const StringName &p_name, const Variant &p_value) {
 	while (sptr) {
 		HashMap<StringName, GDScriptFunction *>::Iterator E = sptr->member_functions.find(GDScriptLanguage::get_singleton()->strings._set);
 		if (E) {
-			Variant name = p_name;
-			const Variant *args[2] = { &name, &p_value };
+			Variant property_name = p_name;
+			const Variant *args[2] = { &property_name, &p_value };
 
 			Callable::CallError err;
 			Variant ret = E->value->call(this, (const Variant **)args, 2, err);
@@ -1533,14 +1557,21 @@ bool GDScriptInstance::get(const StringName &p_name, Variant &r_ret) const {
 		{
 			HashMap<StringName, GDScript::MemberInfo>::ConstIterator E = script->member_indices.find(p_name);
 			if (E) {
-				if (E->value.getter) {
+				const GDScript::MemberInfo *member = &E->value;
+				if (member->getter) {
+					Variant property_name = p_name;
+					Variant *args[1] = { nullptr };
+					if (member->getter_size == 1) {
+						args[0] = &property_name;
+					}
+					// TODO: Throw an error if getter_size isn't 0 or 1?
 					Callable::CallError err;
-					r_ret = const_cast<GDScriptInstance *>(this)->callp(E->value.getter, nullptr, 0, err);
+					r_ret = const_cast<GDScriptInstance *>(this)->callp(member->getter, (const Variant **)args, member->getter_size, err);
 					if (err.error == Callable::CallError::CALL_OK) {
 						return true;
 					}
 				}
-				r_ret = members[E->value.index];
+				r_ret = members[member->index];
 				return true; //index found
 			}
 		}
@@ -1590,8 +1621,8 @@ bool GDScriptInstance::get(const StringName &p_name, Variant &r_ret) const {
 		{
 			HashMap<StringName, GDScriptFunction *>::ConstIterator E = sptr->member_functions.find(GDScriptLanguage::get_singleton()->strings._get);
 			if (E) {
-				Variant name = p_name;
-				const Variant *args[1] = { &name };
+				Variant property_name = p_name;
+				const Variant *args[1] = { &property_name };
 
 				Callable::CallError err;
 				Variant ret = const_cast<GDScriptFunction *>(E->value)->call(const_cast<GDScriptInstance *>(this), (const Variant **)args, 1, err);
@@ -1699,8 +1730,8 @@ void GDScriptInstance::get_property_list(List<PropertyInfo> *p_properties) const
 }
 
 bool GDScriptInstance::property_can_revert(const StringName &p_name) const {
-	Variant name = p_name;
-	const Variant *args[1] = { &name };
+	Variant property_name = p_name;
+	const Variant *args[1] = { &property_name };
 
 	const GDScript *sptr = script.ptr();
 	while (sptr) {
@@ -1719,8 +1750,8 @@ bool GDScriptInstance::property_can_revert(const StringName &p_name) const {
 }
 
 bool GDScriptInstance::property_get_revert(const StringName &p_name, Variant &r_ret) const {
-	Variant name = p_name;
-	const Variant *args[1] = { &name };
+	Variant property_name = p_name;
+	const Variant *args[1] = { &property_name };
 
 	const GDScript *sptr = script.ptr();
 	while (sptr) {
