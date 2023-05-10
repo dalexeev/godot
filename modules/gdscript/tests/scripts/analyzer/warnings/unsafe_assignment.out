@@ -1,0 +1,12 @@
+GDTEST_OK
+
+>> WARNING
+>> Line: 7
+>> UNSAFE_ASSIGNMENT
+>> The left operand is of the subtype "int" but a value of the supertype "Variant" was assigned.
+
+>> WARNING
+>> Line: 8
+>> UNSAFE_ASSIGNMENT
+>> The left operand is of the subtype "int" but a value of the supertype "Variant" was assigned.
+

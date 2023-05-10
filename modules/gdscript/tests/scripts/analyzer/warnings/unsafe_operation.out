@@ -1,0 +1,37 @@
+GDTEST_OK
+>> WARNING
+>> Line: 8
+>> UNSAFE_OPERATION
+>> The type of at least one operand is unknown in the operation "+".
+>> WARNING
+>> Line: 9
+>> UNSAFE_OPERATION
+>> The type of at least one operand is unknown in the operation "+".
+>> WARNING
+>> Line: 10
+>> UNSAFE_OPERATION
+>> The type of at least one operand is unknown in the operation "+".
+>> WARNING
+>> Line: 11
+>> UNSAFE_OPERATION
+>> The type of at least one operand is unknown in the operation "+".
+>> WARNING
+>> Line: 12
+>> UNSAFE_OPERATION
+>> The type of at least one operand is unknown in the operation "+".
+>> WARNING
+>> Line: 15
+>> UNSAFE_OPERATION
+>> The type of at least one operand is unknown in the operation "unary-".
+>> WARNING
+>> Line: 16
+>> UNSAFE_OPERATION
+>> The type of at least one operand is unknown in the operation "unary-".
+>> WARNING
+>> Line: 19
+>> UNSAFE_OPERATION
+>> The type of at least one operand is unknown in the operation "+".
+>> WARNING
+>> Line: 20
+>> UNSAFE_OPERATION
+>> The type of at least one operand is unknown in the operation "+".

@@ -1,0 +1,13 @@
+GDTEST_OK
+>> WARNING
+>> Line: 4
+>> UNSAFE_ASSIGNMENT
+>> The parameter "_hard_int_param" is of the subtype "int" but a value of the supertype "Variant" was assigned.
+>> WARNING
+>> Line: 14
+>> UNSAFE_ASSIGNMENT
+>> The variable "_hard_int_2" is of the subtype "int" but a value of the supertype "Variant" was assigned.
+>> WARNING
+>> Line: 15
+>> UNSAFE_ASSIGNMENT
+>> The variable "_hard_int_3" is of the subtype "int" but a value of the supertype "Variant" was assigned.

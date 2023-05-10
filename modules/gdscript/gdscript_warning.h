@@ -64,6 +64,8 @@ public:
 		PROPERTY_USED_AS_FUNCTION, // Function not found, but there's a property with the same name.
 		CONSTANT_USED_AS_FUNCTION, // Function not found, but there's a constant with the same name.
 		FUNCTION_USED_AS_PROPERTY, // Property not found, but there's a function with the same name.
+		UNSAFE_ASSIGNMENT, // Assigned value is of a supertype of the required type.
+		UNSAFE_OPERATION, // At least one operand of the unary/binary operation is of unknown type.
 		UNSAFE_PROPERTY_ACCESS, // Property not found in the detected type (but can be in subtypes).
 		UNSAFE_METHOD_ACCESS, // Function not found in the detected type (but can be in subtypes).
 		UNSAFE_CAST, // Cast used in an unknown type.
@@ -109,6 +111,8 @@ public:
 		WARN, // PROPERTY_USED_AS_FUNCTION
 		WARN, // CONSTANT_USED_AS_FUNCTION
 		WARN, // FUNCTION_USED_AS_PROPERTY
+		IGNORE, // UNSAFE_ASSIGNMENT // Too common in untyped scenarios.
+		IGNORE, // UNSAFE_OPERATION // Too common in untyped scenarios.
 		IGNORE, // UNSAFE_PROPERTY_ACCESS // Too common in untyped scenarios.
 		IGNORE, // UNSAFE_METHOD_ACCESS // Too common in untyped scenarios.
 		IGNORE, // UNSAFE_CAST // Too common in untyped scenarios.

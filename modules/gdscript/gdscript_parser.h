@@ -143,7 +143,9 @@ public:
 		_FORCE_INLINE_ bool has_no_type() const { return type_source == UNDETECTED; }
 		_FORCE_INLINE_ bool is_variant() const { return kind == VARIANT || kind == RESOLVING || kind == UNRESOLVED; }
 		_FORCE_INLINE_ bool is_hard_type() const { return type_source > INFERRED; }
+
 		String to_string() const;
+		_FORCE_INLINE_ String to_string_strict() const { return is_hard_type() ? to_string() : "Variant"; }
 
 		_FORCE_INLINE_ void set_container_element_type(const DataType &p_type) {
 			container_element_type = memnew(DataType(p_type));

@@ -1830,22 +1830,32 @@ void GDScriptAnalyzer::resolve_assignable(GDScriptParser::AssignableNode *p_assi
 				type.type_source = GDScriptParser::DataType::INFERRED;
 			}
 		} else if (!specified_type.is_variant()) {
+#ifdef DEBUG_ENABLED
+				String assignee_label = vformat(R"(%s "%s")", p_kind, p_assignable->identifier->name);
+#endif
 			if (initializer_type.is_variant() || !initializer_type.is_hard_type()) {
+#ifdef DEBUG_ENABLED
 				mark_node_unsafe(p_assignable->initializer);
+				parser->push_warning(p_assignable->initializer, GDScriptWarning::UNSAFE_ASSIGNMENT, assignee_label, specified_type.to_string(), initializer_type.to_string_strict());
+#endif
 				p_assignable->use_conversion_assign = true;
 				if (!initializer_type.is_variant() && !is_type_compatible(specified_type, initializer_type, true, p_assignable->initializer)) {
 					downgrade_node_type_source(p_assignable->initializer);
 				}
 			} else if (!is_type_compatible(specified_type, initializer_type, true, p_assignable->initializer)) {
 				if (!is_constant && is_type_compatible(initializer_type, specified_type)) {
+#ifdef DEBUG_ENABLED
 					mark_node_unsafe(p_assignable->initializer);
+					parser->push_warning(p_assignable->initializer, GDScriptWarning::UNSAFE_ASSIGNMENT, assignee_label, specified_type.to_string(), initializer_type.to_string_strict());
+#endif
 					p_assignable->use_conversion_assign = true;
 				} else {
-					push_error(vformat(R"(Cannot assign a value of type %s to %s "%s" with specified type %s.)", initializer_type.to_string(), p_kind, p_assignable->identifier->name, specified_type.to_string()), p_assignable->initializer);
+					push_error(vformat(R"(Cannot assign a value of type %s to %s "%s" with specified type %s.)", initializer_type.to_string_strict(), assignee_label, specified_type.to_string()), p_assignable->initializer);
 				}
+#ifdef DEBUG_ENABLED
 			} else if (specified_type.has_container_element_type() && !initializer_type.has_container_element_type()) {
 				mark_node_unsafe(p_assignable->initializer);
-#ifdef DEBUG_ENABLED
+				parser->push_warning(p_assignable->initializer, GDScriptWarning::UNSAFE_ASSIGNMENT, assignee_label, specified_type.to_string(), initializer_type.to_string_strict());
 			} else if (specified_type.builtin_type == Variant::INT && initializer_type.builtin_type == Variant::FLOAT) {
 				parser->push_warning(p_assignable->initializer, GDScriptWarning::NARROWING_CONVERSION);
 #endif
@@ -2500,92 +2510,75 @@ void GDScriptAnalyzer::reduce_assignment(GDScriptParser::AssignmentNode *p_assig
 
 	bool assignee_is_variant = assignee_type.is_variant();
 	bool assignee_is_hard = assignee_type.is_hard_type();
-	bool assigned_is_variant = assigned_value_type.is_variant();
-	bool assigned_is_hard = assigned_value_type.is_hard_type();
-	bool compatible = true;
-	bool downgrades_assignee = false;
-	bool downgrades_assigned = false;
-	GDScriptParser::DataType op_type = assigned_value_type;
-	if (p_assignment->operation != GDScriptParser::AssignmentNode::OP_NONE && !op_type.is_variant()) {
-		op_type = get_operation_type(p_assignment->variant_op, assignee_type, assigned_value_type, compatible, p_assignment->assigned_value);
+	bool assigned_value_is_variant = assigned_value_type.is_variant();
+	bool assigned_value_is_hard = assigned_value_type.is_hard_type();
 
-		if (assignee_is_variant) {
-			// variant assignee
-			mark_node_unsafe(p_assignment);
-		} else if (!compatible) {
-			// incompatible hard types and non-variant assignee
-			mark_node_unsafe(p_assignment);
-			if (assigned_is_variant) {
-				// incompatible hard non-variant assignee and hard variant assigned
-				p_assignment->use_conversion_assign = true;
-			} else {
-				// incompatible hard non-variant types
-				push_error(vformat(R"(Invalid operands "%s" and "%s" for assignment operator.)", assignee_type.to_string(), assigned_value_type.to_string()), p_assignment);
-			}
-		} else if (op_type.type_source == GDScriptParser::DataType::UNDETECTED && !assigned_is_variant) {
-			// incompatible non-variant types (at least one weak)
-			downgrades_assignee = !assignee_is_hard;
-			downgrades_assigned = !assigned_is_hard;
-		}
-	}
-	p_assignment->set_datatype(op_type);
+	// Operation.
+	if (p_assignment->operation != GDScriptParser::AssignmentNode::OP_NONE) {
+		GDScriptParser::DataType op_result_type;
 
-	if (assignee_is_variant) {
-		if (!assignee_is_hard) {
-			// weak variant assignee
-			mark_node_unsafe(p_assignment);
-		}
-	} else {
-		if (assignee_is_hard && !assigned_is_hard) {
-			// hard non-variant assignee and weak assigned
-			mark_node_unsafe(p_assignment);
-			p_assignment->use_conversion_assign = true;
-			downgrades_assigned = downgrades_assigned || (!assigned_is_variant && !is_type_compatible(assignee_type, op_type, true, p_assignment->assigned_value));
-		} else if (compatible) {
-			if (op_type.is_variant()) {
-				// non-variant assignee and variant result
+		if (p_assignment->variant_op < Variant::OP_MAX) {
+			if (assignee_is_variant || assigned_value_is_variant) {
+				// Cannot infer type because one operand can be anything.
+				op_result_type.kind = GDScriptParser::DataType::VARIANT;
+#ifdef DEBUG_ENABLED
 				mark_node_unsafe(p_assignment);
-				if (assignee_is_hard) {
-					// hard non-variant assignee and variant result
+				parser->push_warning(p_assignment, GDScriptWarning::UNSAFE_OPERATION, Variant::get_operator_name(p_assignment->variant_op), assignee_type.to_string_strict(), assigned_value_type.to_string_strict());
+#endif
+			} else {
+				bool valid = false;
+				op_result_type = get_operation_type(p_assignment->variant_op, assignee_type, assigned_value_type, valid);
+				if (!valid) {
+					push_error(vformat(R"(Invalid operands "%s" and "%s" for assignment operator.)", assignee_type.to_string(), assigned_value_type.to_string()), p_assignment);
+#ifdef DEBUG_ENABLED
+				} else if (!op_result_type.is_hard_type()) {
+					mark_node_unsafe(p_assignment);
+					parser->push_warning(p_assignment, GDScriptWarning::UNSAFE_OPERATION, Variant::get_operator_name(p_assignment->variant_op), assignee_type.to_string_strict(), assigned_value_type.to_string_strict());
+#endif
+				}
+			}
+		} else {
+			ERR_PRINT("Parser bug: unknown binary operation.");
+		}
+
+		assigned_value_type = op_result_type;
+		assigned_value_is_variant = assigned_value_type.is_variant();
+		assigned_value_is_hard = assigned_value_type.is_hard_type();
+	}
+
+	// Assignment.
+	if (!assignee_is_variant) {
+		if (assignee_is_hard) {
+			if (assigned_value_is_variant || !assigned_value_is_hard) {
+#ifdef DEBUG_ENABLED
+				mark_node_unsafe(p_assignment);
+				parser->push_warning(p_assignment, GDScriptWarning::UNSAFE_ASSIGNMENT, "left operand", assignee_type.to_string(), assigned_value_type.to_string_strict());
+#endif
+				p_assignment->use_conversion_assign = true;
+				if (!assigned_value_is_variant && !is_type_compatible(assignee_type, assigned_value_type, true)) {
+					downgrade_node_type_source(p_assignment->assigned_value);
+				}
+			} else if (!is_type_compatible(assignee_type, assigned_value_type, true)) {
+				if (is_type_compatible(assigned_value_type, assignee_type)) {
+#ifdef DEBUG_ENABLED
+					mark_node_unsafe(p_assignment);
+					parser->push_warning(p_assignment, GDScriptWarning::UNSAFE_ASSIGNMENT, "left operand", assignee_type.to_string(), assigned_value_type.to_string_strict());
+#endif
 					p_assignment->use_conversion_assign = true;
 				} else {
-					// weak non-variant assignee and variant result
-					downgrades_assignee = true;
+					push_error(vformat(R"(Value of type "%s" cannot be assigned to a variable of type "%s".)", assigned_value_type.to_string(), assignee_type.to_string()), p_assignment->assigned_value);
 				}
-			} else if (!is_type_compatible(assignee_type, op_type, assignee_is_hard, p_assignment->assigned_value)) {
-				// non-variant assignee and incompatible result
-				mark_node_unsafe(p_assignment);
-				if (assignee_is_hard) {
-					if (is_type_compatible(op_type, assignee_type)) {
-						// hard non-variant assignee and maybe compatible result
-						p_assignment->use_conversion_assign = true;
-					} else {
-						// hard non-variant assignee and incompatible result
-						push_error(vformat(R"(Value of type "%s" cannot be assigned to a variable of type "%s".)", assigned_value_type.to_string(), assignee_type.to_string()), p_assignment->assigned_value);
-					}
-				} else {
-					// weak non-variant assignee and incompatible result
-					downgrades_assignee = true;
-				}
-			} else if (assignee_type.has_container_element_type() && !op_type.has_container_element_type()) {
-				// typed array assignee and untyped array result
-				mark_node_unsafe(p_assignment);
 			}
+		} else {
+#ifdef DEBUG_ENABLED
+			mark_node_unsafe(p_assignment);
+			parser->push_warning(p_assignment, GDScriptWarning::UNSAFE_ASSIGNMENT, "left operand", assignee_type.to_string(), assigned_value_type.to_string_strict());
+#endif
+			downgrade_node_type_source(p_assignment->assignee);
 		}
 	}
 
-	if (downgrades_assignee) {
-		downgrade_node_type_source(p_assignment->assignee);
-	}
-	if (downgrades_assigned) {
-		downgrade_node_type_source(p_assignment->assigned_value);
-	}
-
-#ifdef DEBUG_ENABLED
-	if (assignee_type.is_hard_type() && assignee_type.builtin_type == Variant::INT && assigned_value_type.builtin_type == Variant::FLOAT) {
-		parser->push_warning(p_assignment->assigned_value, GDScriptWarning::NARROWING_CONVERSION);
-	}
-#endif
+	p_assignment->set_datatype(assigned_value_type);
 }
 
 void GDScriptAnalyzer::reduce_await(GDScriptParser::AwaitNode *p_await) {
@@ -2680,14 +2673,20 @@ void GDScriptAnalyzer::reduce_binary_op(GDScriptParser::BinaryOpNode *p_binary_o
 	} else if (left_type.is_variant() || right_type.is_variant()) {
 		// Cannot infer type because one operand can be anything.
 		result.kind = GDScriptParser::DataType::VARIANT;
+#ifdef DEBUG_ENABLED
 		mark_node_unsafe(p_binary_op);
+		parser->push_warning(p_binary_op, GDScriptWarning::UNSAFE_OPERATION, Variant::get_operator_name(p_binary_op->variant_op), left_type.to_string_strict(), right_type.to_string_strict());
+#endif
 	} else if (p_binary_op->variant_op < Variant::OP_MAX) {
 		bool valid = false;
-		result = get_operation_type(p_binary_op->variant_op, left_type, right_type, valid, p_binary_op);
+		result = get_operation_type(p_binary_op->variant_op, left_type, right_type, valid);
 		if (!valid) {
 			push_error(vformat(R"(Invalid operands "%s" and "%s" for "%s" operator.)", left_type.to_string(), right_type.to_string(), Variant::get_operator_name(p_binary_op->variant_op)), p_binary_op);
+#ifdef DEBUG_ENABLED
 		} else if (!result.is_hard_type()) {
 			mark_node_unsafe(p_binary_op);
+			parser->push_warning(p_binary_op, GDScriptWarning::UNSAFE_OPERATION, Variant::get_operator_name(p_binary_op->variant_op), left_type.to_string_strict(), right_type.to_string_strict());
+#endif
 		}
 	} else {
 		ERR_PRINT("Parser bug: unknown binary operation.");
@@ -4322,14 +4321,23 @@ void GDScriptAnalyzer::reduce_unary_op(GDScriptParser::UnaryOpNode *p_unary_op) 
 
 	if (operand_type.is_variant()) {
 		result.kind = GDScriptParser::DataType::VARIANT;
+#ifdef DEBUG_ENABLED
 		mark_node_unsafe(p_unary_op);
-	} else {
+		parser->push_warning(p_unary_op, GDScriptWarning::UNSAFE_OPERATION, Variant::get_operator_name(p_unary_op->variant_op), operand_type.to_string_strict());
+#endif
+	} else if (p_unary_op->variant_op < Variant::OP_MAX) {
 		bool valid = false;
-		result = get_operation_type(p_unary_op->variant_op, operand_type, valid, p_unary_op);
-
+		result = get_operation_type(p_unary_op->variant_op, operand_type, valid);
 		if (!valid) {
 			push_error(vformat(R"(Invalid operand of type "%s" for unary operator "%s".)", operand_type.to_string(), Variant::get_operator_name(p_unary_op->variant_op)), p_unary_op);
+#ifdef DEBUG_ENABLED
+		} else if (!result.is_hard_type()) {
+			mark_node_unsafe(p_unary_op);
+			parser->push_warning(p_unary_op, GDScriptWarning::UNSAFE_OPERATION, Variant::get_operator_name(p_unary_op->variant_op), operand_type.to_string_strict());
+#endif
 		}
+	} else {
+		ERR_PRINT("Parser bug: unknown unary operation.");
 	}
 
 	p_unary_op->set_datatype(result);
@@ -4917,15 +4925,15 @@ void GDScriptAnalyzer::is_shadowing(GDScriptParser::IdentifierNode *p_local, con
 }
 #endif
 
-GDScriptParser::DataType GDScriptAnalyzer::get_operation_type(Variant::Operator p_operation, const GDScriptParser::DataType &p_a, bool &r_valid, const GDScriptParser::Node *p_source) {
+GDScriptParser::DataType GDScriptAnalyzer::get_operation_type(Variant::Operator p_operation, const GDScriptParser::DataType &p_a, bool &r_valid) {
 	// Unary version.
 	GDScriptParser::DataType nil_type;
 	nil_type.builtin_type = Variant::NIL;
 	nil_type.type_source = GDScriptParser::DataType::ANNOTATED_INFERRED;
-	return get_operation_type(p_operation, p_a, nil_type, r_valid, p_source);
+	return get_operation_type(p_operation, p_a, nil_type, r_valid);
 }
 
-GDScriptParser::DataType GDScriptAnalyzer::get_operation_type(Variant::Operator p_operation, const GDScriptParser::DataType &p_a, const GDScriptParser::DataType &p_b, bool &r_valid, const GDScriptParser::Node *p_source) {
+GDScriptParser::DataType GDScriptAnalyzer::get_operation_type(Variant::Operator p_operation, const GDScriptParser::DataType &p_a, const GDScriptParser::DataType &p_b, bool &r_valid) {
 	Variant::Type a_type = p_a.builtin_type;
 	Variant::Type b_type = p_b.builtin_type;
 
