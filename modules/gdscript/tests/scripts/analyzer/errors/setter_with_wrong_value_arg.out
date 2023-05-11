@@ -1,0 +1,2 @@
+GDTEST_ANALYZER_ERROR
+Function with value argument of type "Array" cannot be used as setter for a property of type "int".

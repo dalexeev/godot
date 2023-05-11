@@ -1,2 +1,2 @@
 GDTEST_ANALYZER_ERROR
-Function with argument type "int" cannot be used as setter for a property of type "String".
+Function with value argument of type "int" cannot be used as setter for a property of type "String".

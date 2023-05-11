@@ -66,9 +66,9 @@ class GDScript : public Script {
 	struct MemberInfo {
 		int index = 0;
 		StringName setter;
-		int setter_size = 1;
+		bool setter_with_name = false;
 		StringName getter;
-		int getter_size = 0;
+		bool getter_with_name = false;
 		GDScriptDataType data_type;
 	};
 

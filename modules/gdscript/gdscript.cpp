@@ -897,14 +897,14 @@ bool GDScript::_get(const StringName &p_name, Variant &r_ret) const {
 				if (E) {
 					const GDScript::MemberInfo *member = &E->value;
 					if (member->getter) {
-						Variant property_name = p_name;
-						Variant *args[1] = { nullptr };
-						if (member->getter_size == 1) {
-							args[0] = &property_name;
-						}
-						// TODO: Throw an error if getter_size isn't 0 or 1?
 						Callable::CallError ce;
-						r_ret = const_cast<GDScript *>(this)->callp(member->getter, (const Variant **)args, member->getter_size, ce);
+						if (member->getter_with_name) {
+							Variant property_name = p_name;
+							const Variant *args = &property_name;
+							r_ret = const_cast<GDScript *>(this)->callp(member->getter, &args, 1, ce);
+						} else {
+							r_ret = const_cast<GDScript *>(this)->callp(member->getter, nullptr, 0, ce);
+						}
 						return true;
 					}
 					r_ret = static_variables[member->index];
@@ -936,26 +936,23 @@ bool GDScript::_set(const StringName &p_name, const Variant &p_value) {
 				Variant value = p_value;
 				if (member->data_type.has_type && !member->data_type.is_type(value)) {
 					const Variant *args = &p_value;
-					Callable::CallError err;
-					Variant::construct(member->data_type.builtin_type, value, &args, 1, err);
-					if (err.error != Callable::CallError::CALL_OK || !member->data_type.is_type(value)) {
+					Callable::CallError ce;
+					Variant::construct(member->data_type.builtin_type, value, &args, 1, ce);
+					if (ce.error != Callable::CallError::CALL_OK || !member->data_type.is_type(value)) {
 						return false;
 					}
 				}
 				if (member->setter) {
-					Variant property_name = p_name;
-					Variant *args[2] = { nullptr, nullptr };
-					if (member->setter_size == 2) {
-						args[0] = &property_name;
-						args[1] = &value;
+					Callable::CallError ce;
+					if (member->setter_with_name) {
+						Variant property_name = p_name;
+						const Variant *args[2] = { &property_name, &value };
+						callp(member->setter, args, 2, ce);
+					} else {
+						const Variant *args = &value;
+						callp(member->setter, &args, 1, ce);
 					}
-					// TODO: Throw an error if setter_size isn't 1 or 2?
-					else {
-						args[0] = &value;
-					}
-					Callable::CallError err;
-					callp(member->setter, (const Variant **)args, member->setter_size, err);
-					return err.error == Callable::CallError::CALL_OK;
+					return ce.error == Callable::CallError::CALL_OK;
 				} else {
 					static_variables.write[member->index] = value;
 					return true;
@@ -1512,19 +1509,16 @@ bool GDScriptInstance::set(const StringName &p_name, const Variant &p_value) {
 				}
 			}
 			if (member->setter) {
-				Variant property_name = p_name;
-				Variant *args[2] = { nullptr, nullptr };
-				if (member->setter_size == 2) {
-					args[0] = &property_name;
-					args[1] = &value;
+				Callable::CallError ce;
+				if (member->setter_with_name) {
+					Variant property_name = p_name;
+					const Variant *args[2] = { &property_name, &value };
+					callp(member->setter, args, 2, ce);
+				} else {
+					const Variant *args = &value;
+					callp(member->setter, &args, 1, ce);
 				}
-				// TODO: Throw an error if setter_size isn't 1 or 2?
-				else {
-					args[0] = &value;
-				}
-				Callable::CallError err;
-				callp(member->setter, (const Variant **)args, member->setter_size, err);
-				return err.error == Callable::CallError::CALL_OK;
+				return ce.error == Callable::CallError::CALL_OK;
 			} else {
 				members.write[member->index] = value;
 				return true;
@@ -1539,9 +1533,9 @@ bool GDScriptInstance::set(const StringName &p_name, const Variant &p_value) {
 			Variant property_name = p_name;
 			const Variant *args[2] = { &property_name, &p_value };
 
-			Callable::CallError err;
-			Variant ret = E->value->call(this, (const Variant **)args, 2, err);
-			if (err.error == Callable::CallError::CALL_OK && ret.get_type() == Variant::BOOL && ret.operator bool()) {
+			Callable::CallError ce;
+			Variant ret = E->value->call(this, (const Variant **)args, 2, ce);
+			if (ce.error == Callable::CallError::CALL_OK && ret.get_type() == Variant::BOOL && ret.operator bool()) {
 				return true;
 			}
 		}
@@ -1559,15 +1553,15 @@ bool GDScriptInstance::get(const StringName &p_name, Variant &r_ret) const {
 			if (E) {
 				const GDScript::MemberInfo *member = &E->value;
 				if (member->getter) {
-					Variant property_name = p_name;
-					Variant *args[1] = { nullptr };
-					if (member->getter_size == 1) {
-						args[0] = &property_name;
+					Callable::CallError ce;
+					if (member->getter_with_name) {
+						Variant property_name = p_name;
+						const Variant *args = &property_name;
+						r_ret = const_cast<GDScriptInstance *>(this)->callp(member->getter, &args, 1, ce);
+					} else {
+						r_ret = const_cast<GDScriptInstance *>(this)->callp(member->getter, nullptr, 0, ce);
 					}
-					// TODO: Throw an error if getter_size isn't 0 or 1?
-					Callable::CallError err;
-					r_ret = const_cast<GDScriptInstance *>(this)->callp(member->getter, (const Variant **)args, member->getter_size, err);
-					if (err.error == Callable::CallError::CALL_OK) {
+					if (ce.error == Callable::CallError::CALL_OK) {
 						return true;
 					}
 				}

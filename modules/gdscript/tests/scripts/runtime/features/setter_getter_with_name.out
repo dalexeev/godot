@@ -1,0 +1,25 @@
+GDTEST_OK
+get_normal_untyped true
+0
+get_normal_typed true
+0
+get_named_untyped c true
+0
+get_named_typed d true
+0
+get_normal_untyped true
+0
+get_normal_typed true
+0
+get_named_untyped c true
+0
+get_named_typed d true
+0
+set_normal_untyped 1 true
+set_normal_typed 1 true
+set_named_untyped c 1 true
+set_named_typed d 1 true
+set_normal_untyped 2 true
+set_normal_typed 2 true
+set_named_untyped c 2 true
+set_named_typed d 2 true
