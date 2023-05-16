@@ -148,6 +148,7 @@ public:
 
 	operator PropertyInfo() const {
 		PropertyInfo info;
+		info.usage = PROPERTY_USAGE_NONE;
 		if (has_type) {
 			switch (kind) {
 				case UNINITIALIZED:
@@ -237,6 +238,8 @@ public:
 		OPCODE_GET_NAMED_VALIDATED,
 		OPCODE_SET_MEMBER,
 		OPCODE_GET_MEMBER,
+		OPCODE_SET_STATIC_VARIABLE, // Only for GDScript.
+		OPCODE_GET_STATIC_VARIABLE, // Only for GDScript.
 		OPCODE_ASSIGN,
 		OPCODE_ASSIGN_TRUE,
 		OPCODE_ASSIGN_FALSE,
@@ -409,8 +412,7 @@ public:
 		ADDR_TYPE_STACK = 0,
 		ADDR_TYPE_CONSTANT = 1,
 		ADDR_TYPE_MEMBER = 2,
-		ADDR_TYPE_STATIC_VAR = 3,
-		ADDR_TYPE_MAX = 4,
+		ADDR_TYPE_MAX = 3,
 	};
 
 	enum FixedAddresses {

@@ -217,6 +217,8 @@ void (*type_init_function_table[])(Variant *) = {
 		&&OPCODE_GET_NAMED_VALIDATED,                \
 		&&OPCODE_SET_MEMBER,                         \
 		&&OPCODE_GET_MEMBER,                         \
+		&&OPCODE_SET_STATIC_VARIABLE,                \
+		&&OPCODE_GET_STATIC_VARIABLE,                \
 		&&OPCODE_ASSIGN,                             \
 		&&OPCODE_ASSIGN_TRUE,                        \
 		&&OPCODE_ASSIGN_FALSE,                       \
@@ -680,10 +682,10 @@ Variant GDScriptFunction::call(GDScriptInstance *p_instance, const Variant **p_a
 	bool awaited = false;
 #endif
 #ifdef DEBUG_ENABLED
-	int variant_address_limits[ADDR_TYPE_MAX] = { _stack_size, _constant_count, p_instance ? p_instance->members.size() : 0, script->static_variables.size() };
+	int variant_address_limits[ADDR_TYPE_MAX] = { _stack_size, _constant_count, p_instance ? p_instance->members.size() : 0 };
 #endif
 
-	Variant *variant_addresses[ADDR_TYPE_MAX] = { stack, _constants_ptr, p_instance ? p_instance->members.ptrw() : nullptr, script->static_variables.ptrw() };
+	Variant *variant_addresses[ADDR_TYPE_MAX] = { stack, _constants_ptr, p_instance ? p_instance->members.ptrw() : nullptr };
 
 #ifdef DEBUG_ENABLED
 	OPCODE_WHILE(ip < _code_size) {
@@ -1168,6 +1170,38 @@ Variant GDScriptFunction::call(GDScriptInstance *p_instance, const Variant **p_a
 				}
 #endif
 				ip += 3;
+			}
+			DISPATCH_OPCODE;
+
+			OPCODE(OPCODE_SET_STATIC_VARIABLE) {
+				CHECK_SPACE(4);
+
+				GET_VARIANT_PTR(_class, 0);
+				GDScript *gdscript = Object::cast_to<GDScript>(_class->operator Object *());
+				GD_ERR_BREAK(!gdscript);
+
+				GET_VARIANT_PTR(index, 1);
+				GET_VARIANT_PTR(value, 2);
+
+				gdscript->static_variables.write[*index] = *value;
+
+				ip += 4;
+			}
+			DISPATCH_OPCODE;
+
+			OPCODE(OPCODE_GET_STATIC_VARIABLE) {
+				CHECK_SPACE(4);
+
+				GET_VARIANT_PTR(_class, 0);
+				GDScript *gdscript = Object::cast_to<GDScript>(_class->operator Object *());
+				GD_ERR_BREAK(!gdscript);
+
+				GET_VARIANT_PTR(index, 1);
+				GET_VARIANT_PTR(dst, 2);
+
+				*dst = gdscript->static_variables[*index];
+
+				ip += 4;
 			}
 			DISPATCH_OPCODE;
 

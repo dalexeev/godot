@@ -312,6 +312,48 @@ void GDScriptFunction::disassemble(const Vector<String> &p_code_lines) const {
 
 				incr += 3;
 			} break;
+			case OPCODE_SET_STATIC_VARIABLE: {
+				text += "set_static_variable script (";
+				Variant _class = _constants_ptr[_code_ptr[ip + 1]];
+				GDScript *gdscript = Object::cast_to<GDScript>(_class.operator Object *());
+				text += gdscript ? gdscript->get_path() : "<unknown script>";
+				text += ") ";
+				if (gdscript) {
+					HashMap<StringName, GDScript::MemberInfo>::Iterator E = gdscript->static_variables_indices.debug_get_element(_code_ptr[ip + 2]);
+					if (E) {
+						text += "[\"" + E->key + "\"]";
+					} else {
+						text += "<index " + itos(_code_ptr[ip + 2]) + ">";
+					}
+				} else {
+					text += "<index " + itos(_code_ptr[ip + 2]) + ">";
+				}
+				text += " = ";
+				text += DADDR(3);
+
+				incr += 4;
+			} break;
+			case OPCODE_GET_STATIC_VARIABLE: {
+				text += "get_static_variable ";
+				text += DADDR(3);
+				text += " = script (";
+				Variant _class = _constants_ptr[_code_ptr[ip + 1]];
+				GDScript *gdscript = Object::cast_to<GDScript>(_class.operator Object *());
+				text += gdscript ? gdscript->get_path() : "<unknown script>";
+				text += ") ";
+				if (gdscript) {
+					HashMap<StringName, GDScript::MemberInfo>::Iterator E = gdscript->static_variables_indices.debug_get_element(_code_ptr[ip + 2]);
+					if (E) {
+						text += "[\"" + E->key + "\"]";
+					} else {
+						text += "<index " + itos(_code_ptr[ip + 2]) + ">";
+					}
+				} else {
+					text += "<index " + itos(_code_ptr[ip + 2]) + ">";
+				}
+
+				incr += 4;
+			} break;
 			case OPCODE_ASSIGN: {
 				text += "assign ";
 				text += DADDR(1);

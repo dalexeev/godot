@@ -366,8 +366,6 @@ class GDScriptByteCodeGenerator : public GDScriptCodeGenerator {
 				return p_address.address | (GDScriptFunction::ADDR_TYPE_MEMBER << GDScriptFunction::ADDR_BITS);
 			case Address::CONSTANT:
 				return p_address.address | (GDScriptFunction::ADDR_TYPE_CONSTANT << GDScriptFunction::ADDR_BITS);
-			case Address::STATIC_VARIABLE:
-				return p_address.address | (GDScriptFunction::ADDR_TYPE_STATIC_VAR << GDScriptFunction::ADDR_BITS);
 			case Address::LOCAL_VARIABLE:
 			case Address::FUNCTION_PARAMETER:
 				return p_address.address | (GDScriptFunction::ADDR_TYPE_STACK << GDScriptFunction::ADDR_BITS);
@@ -503,6 +501,8 @@ public:
 	virtual void write_get_named(const Address &p_target, const StringName &p_name, const Address &p_source) override;
 	virtual void write_set_member(const Address &p_value, const StringName &p_name) override;
 	virtual void write_get_member(const Address &p_target, const StringName &p_name) override;
+	virtual void write_set_static_variable(const Address &p_class, const Address &p_index, const Address &p_value) override;
+	virtual void write_get_static_variable(const Address &p_class, const Address &p_index, const Address &p_dst) override;
 	virtual void write_assign(const Address &p_target, const Address &p_source) override;
 	virtual void write_assign_with_conversion(const Address &p_target, const Address &p_source) override;
 	virtual void write_assign_true(const Address &p_target) override;
