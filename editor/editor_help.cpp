@@ -989,10 +989,34 @@ void EditorHelp::_update_doc() {
 			_add_text(cd.properties[i].name);
 
 			if (describe) {
-				class_desc->pop();
+				class_desc->pop(); // meta
 			}
 
-			class_desc->pop();
+			class_desc->pop(); // color
+
+			if (!cd.properties[i].qualifiers.is_empty()) {
+				class_desc->push_color(theme_cache.qualifier_color);
+
+				PackedStringArray qualifiers = cd.properties[i].qualifiers.split_spaces();
+				for (const String &qualifier : qualifiers) {
+					String hint;
+					if (qualifier == "static") {
+						hint = TTR("This property belongs to the class, not to the instance.");
+					}
+
+					class_desc->add_text(" ");
+					if (!hint.is_empty()) {
+						class_desc->push_hint(hint);
+						class_desc->add_text(qualifier);
+						class_desc->pop();
+					} else {
+						class_desc->add_text(qualifier);
+					}
+				}
+
+				class_desc->pop(); // color
+			}
+
 			_pop_code_font();
 			class_desc->pop(); // cell
 
@@ -1652,6 +1676,29 @@ void EditorHelp::_update_doc() {
 
 				class_desc->push_color(theme_cache.symbol_color);
 				class_desc->add_text("]");
+				class_desc->pop(); // color
+			}
+
+			if (!cd.properties[i].qualifiers.is_empty()) {
+				class_desc->push_color(theme_cache.qualifier_color);
+
+				PackedStringArray qualifiers = cd.properties[i].qualifiers.split_spaces();
+				for (const String &qualifier : qualifiers) {
+					String hint;
+					if (qualifier == "static") {
+						hint = TTR("This property belongs to the class, not to the instance.");
+					}
+
+					class_desc->add_text(" ");
+					if (!hint.is_empty()) {
+						class_desc->push_hint(hint);
+						class_desc->add_text(qualifier);
+						class_desc->pop();
+					} else {
+						class_desc->add_text(qualifier);
+					}
+				}
+
 				class_desc->pop(); // color
 			}
 

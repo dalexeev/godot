@@ -320,6 +320,7 @@ public:
 		String type;
 		String enumeration;
 		String description;
+		String qualifiers; // static
 		String setter, getter;
 		String default_value;
 		bool overridden = false;
@@ -346,6 +347,10 @@ public:
 
 			if (p_dict.has("description")) {
 				doc.description = p_dict["description"];
+			}
+
+			if (p_dict.has("qualifiers")) {
+				doc.qualifiers = p_dict["qualifiers"];
 			}
 
 			if (p_dict.has("setter")) {
@@ -395,6 +400,10 @@ public:
 
 			if (!p_doc.description.is_empty()) {
 				dict["description"] = p_doc.description;
+			}
+
+			if (!p_doc.qualifiers.is_empty()) {
+				dict["qualifiers"] = p_doc.qualifiers;
 			}
 
 			if (!p_doc.setter.is_empty()) {

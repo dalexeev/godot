@@ -65,6 +65,7 @@ BASE_STRINGS = [
     "This method is used to construct a type.",
     "This method doesn't need an instance to be called, so it can be called directly using the class name.",
     "This method describes a valid operator to use with this type as left-hand operand.",
+    "This property belongs to the class, not to the instance.",
 ]
 strings_l10n: Dict[str, str] = {}
 
@@ -131,6 +132,7 @@ class State:
                     continue
 
                 type_name = TypeName.from_element(property)
+                qualifiers = property.get("qualifiers")
                 setter = property.get("setter") or None  # Use or None so '' gets turned into None.
                 getter = property.get("getter") or None
                 default_value = property.get("default") or None
@@ -139,7 +141,7 @@ class State:
                 overrides = property.get("overrides") or None
 
                 property_def = PropertyDef(
-                    property_name, type_name, setter, getter, property.text, default_value, overrides
+                    property_name, type_name, qualifiers, setter, getter, property.text, default_value, overrides
                 )
                 class_def.properties[property_name] = property_def
 
@@ -394,6 +396,7 @@ class PropertyDef(DefinitionBase):
         self,
         name: str,
         type_name: TypeName,
+        qualifiers: Optional[str],
         setter: Optional[str],
         getter: Optional[str],
         text: Optional[str],
@@ -403,6 +406,7 @@ class PropertyDef(DefinitionBase):
         super().__init__("property", name)
 
         self.type_name = type_name
+        self.qualifiers = qualifiers
         self.setter = setter
         self.getter = getter
         self.text = text
@@ -864,15 +868,24 @@ def make_rst_class(class_def: ClassDef, state: State, dry_run: bool, output_dir:
 
         ml = []
         for property_def in class_def.properties.values():
-            type_rst = property_def.type_name.to_rst(state)
-            default = property_def.default_value
-            if default is not None and property_def.overrides:
+            cell_type = property_def.type_name.to_rst(state)
+            cell_name = ""
+            cell_value = property_def.default_value
+
+            if cell_value is not None and property_def.overrides:
+                cell_name = property_def.name
                 ref = f":ref:`{property_def.overrides}<class_{property_def.overrides}_property_{property_def.name}>`"
-                # Not using translate() for now as it breaks table formatting.
-                ml.append((type_rst, property_def.name, f"{default} (overrides {ref})"))
+                cell_value += f" (overrides {ref})"  # Not using translate() for now as it breaks table formatting.
             else:
-                ref = f":ref:`{property_def.name}<class_{class_name}_property_{property_def.name}>`"
-                ml.append((type_rst, ref, default))
+                cell_name = f":ref:`{property_def.name}<class_{class_name}_property_{property_def.name}>`"
+
+            if property_def.qualifiers is not None:
+                # Use substitutions for abbreviations. This is used to display tooltips on hover.
+                # See `make_footer()` for descriptions.
+                for qualifier in property_def.qualifiers.split():
+                    cell_name += f" |prop_{qualifier}|"
+
+            ml.append((cell_type, cell_name, cell_value))
 
         format_table(f, ml, True)
 
@@ -1080,6 +1093,14 @@ def make_rst_class(class_def: ClassDef, state: State, dry_run: bool, output_dir:
             if property_def.default_value is not None:
                 property_default = f" = {property_def.default_value}"
             f.write(f"{property_def.type_name.to_rst(state)} **{property_def.name}**{property_default}\n\n")
+
+            property_qualifiers = ""
+            if property_def.qualifiers is not None:
+                # Use substitutions for abbreviations. This is used to display tooltips on hover.
+                # See `make_footer()` for descriptions.
+                for qualifier in property_def.qualifiers.split():
+                    property_qualifiers += f" |prop_{qualifier}|"
+            f.write(property_qualifiers)
 
             # Create property setter and getter records.
 
@@ -1412,6 +1433,7 @@ def make_footer() -> str:
         "This method doesn't need an instance to be called, so it can be called directly using the class name."
     )
     operator_msg = translate("This method describes a valid operator to use with this type as left-hand operand.")
+    prop_static_msg = translate("This property belongs to the class, not to the instance.")
 
     return (
         f".. |virtual| replace:: :abbr:`virtual ({virtual_msg})`\n"
@@ -1420,6 +1442,7 @@ def make_footer() -> str:
         f".. |constructor| replace:: :abbr:`constructor ({constructor_msg})`\n"
         f".. |static| replace:: :abbr:`static ({static_msg})`\n"
         f".. |operator| replace:: :abbr:`operator ({operator_msg})`\n"
+        f".. |prop_static| replace:: :abbr:`static ({prop_static_msg})`\n"
     )
 
 

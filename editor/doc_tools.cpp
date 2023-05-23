@@ -487,6 +487,13 @@ void DocTools::generate(bool p_basic_types) {
 					prop.default_value = DocData::get_default_value_string(default_value);
 				}
 
+				if (E.usage & PROPERTY_USAGE_STATIC) {
+					if (!prop.qualifiers.is_empty()) {
+						prop.qualifiers += " ";
+					}
+					prop.qualifiers += "static";
+				}
+
 				StringName setter = ClassDB::get_property_setter(name, E.name);
 				StringName getter = ClassDB::get_property_getter(name, E.name);
 
@@ -1259,6 +1266,9 @@ Error DocTools::_load(Ref<XMLParser> parser) {
 								prop2.name = parser->get_named_attribute_value("name");
 								ERR_FAIL_COND_V(!parser->has_attribute("type"), ERR_FILE_CORRUPT);
 								prop2.type = parser->get_named_attribute_value("type");
+								if (parser->has_attribute("qualifiers")) {
+									prop2.qualifiers = parser->get_named_attribute_value("qualifiers");
+								}
 								if (parser->has_attribute("setter")) {
 									prop2.setter = parser->get_named_attribute_value("setter");
 								}
@@ -1509,23 +1519,26 @@ Error DocTools::save_classes(const String &p_default_path, const HashMap<String,
 			c.properties.sort();
 
 			for (int i = 0; i < c.properties.size(); i++) {
+				const DocData::PropertyDoc &p = c.properties[i];
+
 				String additional_attributes;
-				if (!c.properties[i].enumeration.is_empty()) {
-					additional_attributes += " enum=\"" + c.properties[i].enumeration + "\"";
+				if (!p.qualifiers.is_empty()) {
+					additional_attributes += " qualifiers=\"" + p.qualifiers + "\"";
 				}
-				if (!c.properties[i].default_value.is_empty()) {
-					additional_attributes += " default=\"" + c.properties[i].default_value.xml_escape(true) + "\"";
+				if (!p.enumeration.is_empty()) {
+					additional_attributes += " enum=\"" + p.enumeration + "\"";
 				}
-				if (c.properties[i].is_deprecated) {
+				if (!p.default_value.is_empty()) {
+					additional_attributes += " default=\"" + p.default_value.xml_escape(true) + "\"";
+				}
+				if (p.is_deprecated) {
 					additional_attributes += " is_deprecated=\"true\"";
 				}
-				if (c.properties[i].is_experimental) {
+				if (p.is_experimental) {
 					additional_attributes += " is_experimental=\"true\"";
 				}
 
-				const DocData::PropertyDoc &p = c.properties[i];
-
-				if (c.properties[i].overridden) {
+				if (p.overridden) {
 					_write_string(f, 2, "<member name=\"" + p.name + "\" type=\"" + p.type.xml_escape(true) + "\" setter=\"" + p.setter + "\" getter=\"" + p.getter + "\" overrides=\"" + p.overrides + "\"" + additional_attributes + " />");
 				} else {
 					_write_string(f, 2, "<member name=\"" + p.name + "\" type=\"" + p.type.xml_escape(true) + "\" setter=\"" + p.setter + "\" getter=\"" + p.getter + "\"" + additional_attributes + ">");

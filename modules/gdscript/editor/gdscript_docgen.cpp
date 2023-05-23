@@ -186,6 +186,10 @@ void GDScriptDocGen::generate_docs(GDScript *p_script, const GDP::ClassNode *p_c
 				prop_doc.name = var_name;
 				prop_doc.description = m_var->doc_description;
 
+				if (m_var->is_static) {
+					prop_doc.qualifiers = "static";
+				}
+
 				GDType dt = m_var->get_datatype();
 				switch (dt.kind) {
 					case GDType::CLASS:
