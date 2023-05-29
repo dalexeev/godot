@@ -969,38 +969,48 @@ void ClassDB::add_property(const StringName &p_class, const PropertyInfo &p_pinf
 
 	ERR_FAIL_COND(!type);
 
+	PropertyInfo info = p_pinfo;
+
 	MethodBind *mb_set = nullptr;
 	if (p_setter) {
 		mb_set = get_method(p_class, p_setter);
-#ifdef DEBUG_METHODS_ENABLED
 
-		ERR_FAIL_COND_MSG(!mb_set, "Invalid setter '" + p_class + "::" + p_setter + "' for property '" + p_pinfo.name + "'.");
+#ifdef DEBUG_METHODS_ENABLED
+		ERR_FAIL_COND_MSG(!mb_set, "Invalid setter '" + p_class + "::" + p_setter + "' for property '" + info.name + "'.");
 
 		int exp_args = 1 + (p_index >= 0 ? 1 : 0);
-		ERR_FAIL_COND_MSG(mb_set->get_argument_count() != exp_args, "Invalid function for setter '" + p_class + "::" + p_setter + " for property '" + p_pinfo.name + "'.");
+		ERR_FAIL_COND_MSG(mb_set->get_argument_count() != exp_args, "Invalid function for setter '" + p_class + "::" + p_setter + " for property '" + info.name + "'.");
 #endif
 	}
 
 	MethodBind *mb_get = nullptr;
 	if (p_getter) {
 		mb_get = get_method(p_class, p_getter);
-#ifdef DEBUG_METHODS_ENABLED
 
-		ERR_FAIL_COND_MSG(!mb_get, "Invalid getter '" + p_class + "::" + p_getter + "' for property '" + p_pinfo.name + "'.");
+		// We don't specify enum/BitField when using the ADD_PROPERTY() macro.
+		// Instead, we use the info from the getter.
+		PropertyInfo return_info = mb_get->get_return_info();
+		if (info.class_name == StringName()) {
+			info.class_name = return_info.class_name;
+		}
+		info.usage |= return_info.usage;
+
+#ifdef DEBUG_METHODS_ENABLED
+		ERR_FAIL_COND_MSG(!mb_get, "Invalid getter '" + p_class + "::" + p_getter + "' for property '" + info.name + "'.");
 
 		int exp_args = 0 + (p_index >= 0 ? 1 : 0);
-		ERR_FAIL_COND_MSG(mb_get->get_argument_count() != exp_args, "Invalid function for getter '" + p_class + "::" + p_getter + "' for property: '" + p_pinfo.name + "'.");
+		ERR_FAIL_COND_MSG(mb_get->get_argument_count() != exp_args, "Invalid function for getter '" + p_class + "::" + p_getter + "' for property: '" + info.name + "'.");
 #endif
 	}
 
 #ifdef DEBUG_METHODS_ENABLED
-	ERR_FAIL_COND_MSG(type->property_setget.has(p_pinfo.name), "Object '" + p_class + "' already has property '" + p_pinfo.name + "'.");
+	ERR_FAIL_COND_MSG(type->property_setget.has(info.name), "Object '" + p_class + "' already has property '" + info.name + "'.");
 #endif
 
 	OBJTYPE_WLOCK
 
-	type->property_list.push_back(p_pinfo);
-	type->property_map[p_pinfo.name] = p_pinfo;
+	type->property_list.push_back(info);
+	type->property_map[info.name] = info;
 #ifdef DEBUG_METHODS_ENABLED
 	if (mb_get) {
 		type->methods_in_properties.insert(p_getter);
@@ -1015,9 +1025,9 @@ void ClassDB::add_property(const StringName &p_class, const PropertyInfo &p_pinf
 	psg._setptr = mb_set;
 	psg._getptr = mb_get;
 	psg.index = p_index;
-	psg.type = p_pinfo.type;
+	psg.type = info.type;
 
-	type->property_setget[p_pinfo.name] = psg;
+	type->property_setget[info.name] = psg;
 }
 
 void ClassDB::set_property_default_value(const StringName &p_class, const StringName &p_name, const Variant &p_default) {
