@@ -145,6 +145,10 @@ Dictionary GDScriptSyntaxHighlighter::_get_line_syntax_highlighting_impl(int p_l
 
 						// Check if it's the whole line.
 						if (end_key_length == 0 || color_regions[c].line_only || from + end_key_length > line_length) {
+							// Don't skip comments, for highlighting markers.
+							if (color_regions[in_region].start_key == "#") {
+								break;
+							}
 							if (from + end_key_length > line_length) {
 								// If it's key length and there is a '\', dont skip to highlight esc chars.
 								if (str.find("\\", from) >= 0) {
@@ -163,7 +167,8 @@ Dictionary GDScriptSyntaxHighlighter::_get_line_syntax_highlighting_impl(int p_l
 						break;
 					}
 
-					if (j == line_length) {
+					// Don't skip comments, for highlighting markers.
+					if (j == line_length && color_regions[in_region].start_key != "#") {
 						continue;
 					}
 				}
@@ -185,56 +190,83 @@ Dictionary GDScriptSyntaxHighlighter::_get_line_syntax_highlighting_impl(int p_l
 					highlighter_info["color"] = region_color;
 					color_map[j] = highlighter_info;
 
-					// Search the line.
-					int region_end_index = -1;
-					int end_key_length = color_regions[in_region].end_key.length();
-					const char32_t *end_key = color_regions[in_region].end_key.get_data();
-					for (; from < line_length; from++) {
-						if (line_length - from < end_key_length) {
-							// Don't break if '\' to highlight esc chars.
-							if (str.find("\\", from) < 0) {
-								break;
+					if (color_regions[in_region].start_key == "#") {
+						int marker_start_pos = from;
+						int marker_len = 0;
+						while (from <= line_length) {
+							if (from < line_length && is_unicode_identifier_continue(str[from])) {
+								marker_len++;
+							} else {
+								if (marker_len > 0) {
+									HashMap<String, Color>::ConstIterator E = comment_marker_colors.find(str.substr(marker_start_pos, marker_len));
+									if (E) {
+										Dictionary marker_highlighter_info;
+										marker_highlighter_info["color"] = E->value;
+										color_map[marker_start_pos] = marker_highlighter_info;
+
+										Dictionary marker_continue_highlighter_info;
+										marker_continue_highlighter_info["color"] = region_color;
+										color_map[from] = marker_continue_highlighter_info;
+									}
+								}
+								marker_start_pos = from + 1;
+								marker_len = 0;
 							}
-						}
-
-						if (!is_symbol(str[from])) {
-							continue;
-						}
-
-						if (str[from] == '\\') {
-							Dictionary escape_char_highlighter_info;
-							escape_char_highlighter_info["color"] = symbol_color;
-							color_map[from] = escape_char_highlighter_info;
-
 							from++;
-
-							Dictionary region_continue_highlighter_info;
-							prev_color = region_color;
-							region_continue_highlighter_info["color"] = region_color;
-							color_map[from + 1] = region_continue_highlighter_info;
-							continue;
 						}
+						from = line_length - 1;
+						j = from;
+					} else {
+						// Search the line.
+						int region_end_index = -1;
+						int end_key_length = color_regions[in_region].end_key.length();
+						const char32_t *end_key = color_regions[in_region].end_key.get_data();
+						for (; from < line_length; from++) {
+							if (line_length - from < end_key_length) {
+								// Don't break if '\' to highlight esc chars.
+								if (str.find("\\", from) < 0) {
+									break;
+								}
+							}
 
-						region_end_index = from;
-						for (int k = 0; k < end_key_length; k++) {
-							if (end_key[k] != str[from + k]) {
-								region_end_index = -1;
+							if (!is_symbol(str[from])) {
+								continue;
+							}
+
+							if (str[from] == '\\') {
+								Dictionary escape_char_highlighter_info;
+								escape_char_highlighter_info["color"] = symbol_color;
+								color_map[from] = escape_char_highlighter_info;
+
+								from++;
+
+								Dictionary region_continue_highlighter_info;
+								region_continue_highlighter_info["color"] = region_color;
+								color_map[from + 1] = region_continue_highlighter_info;
+								continue;
+							}
+
+							region_end_index = from;
+							for (int k = 0; k < end_key_length; k++) {
+								if (end_key[k] != str[from + k]) {
+									region_end_index = -1;
+									break;
+								}
+							}
+
+							if (region_end_index != -1) {
 								break;
 							}
 						}
-
-						if (region_end_index != -1) {
-							break;
+						j = from + (end_key_length - 1);
+						if (region_end_index == -1) {
+							color_region_cache[p_line] = in_region;
 						}
 					}
 
 					prev_type = REGION;
 					prev_text = "";
 					prev_column = j;
-					j = from + (end_key_length - 1);
-					if (region_end_index == -1) {
-						color_region_cache[p_line] = in_region;
-					}
 
 					in_region = -1;
 					prev_is_char = false;
@@ -699,6 +731,8 @@ void GDScriptSyntaxHighlighter::_update_cache() {
 	const String text_edit_color_theme = EDITOR_GET("text_editor/theme/color_theme");
 	const bool godot_2_theme = text_edit_color_theme == "Godot 2";
 
+	Dictionary comment_marker_dictionary;
+
 	if (godot_2_theme || EditorSettings::get_singleton()->is_dark_theme()) {
 		function_definition_color = Color(0.4, 0.9, 1.0);
 		global_function_color = Color(0.64, 0.64, 0.96);
@@ -706,6 +740,10 @@ void GDScriptSyntaxHighlighter::_update_cache() {
 		node_ref_color = Color(0.39, 0.76, 0.35);
 		annotation_color = Color(1.0, 0.7, 0.45);
 		string_name_color = Color(1.0, 0.76, 0.65);
+		// The list is based on <https://github.com/KDE/syntax-highlighting/blob/master/data/syntax/alert.xml>.
+		comment_marker_dictionary["ALERT,ATTENTION,DANGER,HACK,SECURITY"] = Color(0.75, 0.35, 0.35);
+		comment_marker_dictionary["BUG,CAUTION,DEPRECATED,FIXME,TASK,TBD,TODO,WARNING"] = Color(0.68, 0.61, 0.46);
+		comment_marker_dictionary["NOTE,NOTICE,TEST,TESTING"] = Color(0.49, 0.59, 0.49);
 	} else {
 		function_definition_color = Color(0, 0.6, 0.6);
 		global_function_color = Color(0.36, 0.18, 0.72);
@@ -713,6 +751,10 @@ void GDScriptSyntaxHighlighter::_update_cache() {
 		node_ref_color = Color(0.0, 0.5, 0);
 		annotation_color = Color(0.8, 0.37, 0);
 		string_name_color = Color(0.8, 0.56, 0.45);
+		// The list is based on <https://github.com/KDE/syntax-highlighting/blob/master/data/syntax/alert.xml>.
+		comment_marker_dictionary["ALERT,ATTENTION,DANGER,HACK,SECURITY"] = Color(0.7, 0.22, 0.22);
+		comment_marker_dictionary["BUG,CAUTION,DEPRECATED,FIXME,TASK,TBD,TODO,WARNING"] = Color(0.68, 0.36, 0.08);
+		comment_marker_dictionary["NOTE,NOTICE,TEST,TESTING"] = Color(0.28, 0.55, 0.19);
 	}
 
 	EDITOR_DEF("text_editor/theme/highlighting/gdscript/function_definition_color", function_definition_color);
@@ -721,6 +763,8 @@ void GDScriptSyntaxHighlighter::_update_cache() {
 	EDITOR_DEF("text_editor/theme/highlighting/gdscript/node_reference_color", node_ref_color);
 	EDITOR_DEF("text_editor/theme/highlighting/gdscript/annotation_color", annotation_color);
 	EDITOR_DEF("text_editor/theme/highlighting/gdscript/string_name_color", string_name_color);
+	EDITOR_DEF("text_editor/theme/highlighting/comment_markers", comment_marker_dictionary);
+
 	if (text_edit_color_theme == "Default" || godot_2_theme) {
 		EditorSettings::get_singleton()->set_initial_value(
 				"text_editor/theme/highlighting/gdscript/function_definition_color",
@@ -746,6 +790,10 @@ void GDScriptSyntaxHighlighter::_update_cache() {
 				"text_editor/theme/highlighting/gdscript/string_name_color",
 				string_name_color,
 				true);
+		EditorSettings::get_singleton()->set_initial_value(
+				"text_editor/theme/highlighting/comment_markers",
+				comment_marker_dictionary,
+				true);
 	}
 
 	function_definition_color = EDITOR_GET("text_editor/theme/highlighting/gdscript/function_definition_color");
@@ -755,6 +803,15 @@ void GDScriptSyntaxHighlighter::_update_cache() {
 	annotation_color = EDITOR_GET("text_editor/theme/highlighting/gdscript/annotation_color");
 	string_name_color = EDITOR_GET("text_editor/theme/highlighting/gdscript/string_name_color");
 	type_color = EDITOR_GET("text_editor/theme/highlighting/base_type_color");
+	comment_marker_dictionary = EDITOR_GET("text_editor/theme/highlighting/comment_markers");
+
+	comment_marker_colors.clear();
+	for (int i = 0; i < comment_marker_dictionary.size(); i++) {
+		Vector<String> markers = comment_marker_dictionary.get_key_at_index(i).operator String().split(",", false);
+		for (int j = 0; j < markers.size(); j++) {
+			comment_marker_colors[markers[j]] = comment_marker_dictionary.get_value_at_index(i);
+		}
+	}
 }
 
 void GDScriptSyntaxHighlighter::add_color_region(const String &p_start_key, const String &p_end_key, const Color &p_color, bool p_line_only) {

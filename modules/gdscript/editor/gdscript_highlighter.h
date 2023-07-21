@@ -83,6 +83,7 @@ private:
 	Color annotation_color;
 	Color string_name_color;
 	Color type_color;
+	HashMap<String, Color> comment_marker_colors;
 
 	void add_color_region(const String &p_start_key, const String &p_end_key, const Color &p_color, bool p_line_only = false);
 
