@@ -250,6 +250,7 @@ public:
 	virtual Vector<DocData::ClassDoc> get_documentation() const override {
 		return docs;
 	}
+	virtual String get_class_icon_path() const override;
 #endif // TOOLS_ENABLED
 
 	virtual Error reload(bool p_keep_state = false) override;

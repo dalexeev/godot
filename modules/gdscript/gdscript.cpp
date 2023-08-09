@@ -482,6 +482,25 @@ void GDScript::_clear_doc() {
 	docs.clear();
 	doc = DocData::ClassDoc();
 }
+
+String GDScript::get_class_icon_path() const {
+	GDScriptParser parser;
+	Error err = parser.parse(source, path, false);
+	if (err != OK) {
+		return String();
+	}
+
+	const GDScriptParser::ClassNode *c = parser.get_tree();
+	if (c) {
+		if (c->icon_path.is_empty() || c->icon_path.is_absolute_path()) {
+			return c->icon_path.simplify_path();
+		} else if (c->icon_path.is_relative_path()) {
+			return path.get_base_dir().path_join(c->icon_path).simplify_path();
+		}
+	}
+
+	return String();
+}
 #endif
 
 bool GDScript::_update_exports(bool *r_err, bool p_recursive_call, PlaceHolderScriptInstance *p_instance_to_update) {
