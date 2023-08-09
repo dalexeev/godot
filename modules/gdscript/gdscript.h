@@ -144,6 +144,7 @@ class GDScript : public Script {
 	String path;
 	String name;
 	String fully_qualified_name;
+	String simplified_icon_path;
 	SelfList<GDScript> script_list;
 
 	SelfList<GDScriptFunctionState>::List pending_func_states;
