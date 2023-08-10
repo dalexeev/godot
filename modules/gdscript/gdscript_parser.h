@@ -162,6 +162,11 @@ public:
 			return container_element_type != nullptr;
 		}
 
+		// `Array` and `Array[Variant]` are the same (both untyped).
+		_FORCE_INLINE_ bool is_typed_container_type() const {
+			return container_element_type != nullptr && container_element_type->kind != VARIANT;
+		}
+
 		_FORCE_INLINE_ void unset_container_element_type() {
 			if (container_element_type) {
 				memdelete(container_element_type);
@@ -169,9 +174,8 @@ public:
 			container_element_type = nullptr;
 		}
 
-		bool is_typed_container_type() const;
-
-		GDScriptParser::DataType get_typed_container_type() const;
+		bool is_packed_array_type() const;
+		GDScriptParser::DataType get_packed_array_element_type() const;
 
 		bool operator==(const DataType &p_other) const {
 			if (type_source == UNDETECTED || p_other.type_source == UNDETECTED) {

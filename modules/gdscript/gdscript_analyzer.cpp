@@ -1293,16 +1293,10 @@ void GDScriptAnalyzer::resolve_class_body(GDScriptParser::ClassNode *p_class, co
 
 						if (getter_function->parameters.size() != 0 || return_datatype.has_no_type()) {
 							push_error(vformat(R"(Function "%s" cannot be used as getter because of its signature.)", getter_function->identifier->name), member.variable);
-						} else if (!is_type_compatible(member.variable->datatype, return_datatype, true)) {
+						} else if (is_type_compatible(member.variable->datatype, return_datatype, true, member.variable) == TypeCompat::ERROR) {
 							push_error(vformat(R"(Function with return type "%s" cannot be used as getter for a property of type "%s".)", return_datatype.to_string(), member.variable->datatype.to_string()), member.variable);
-
 						} else {
 							has_valid_getter = true;
-#ifdef DEBUG_ENABLED
-							if (member.variable->datatype.builtin_type == Variant::INT && return_datatype.builtin_type == Variant::FLOAT) {
-								parser->push_warning(member.variable, GDScriptWarning::NARROWING_CONVERSION);
-							}
-#endif
 						}
 					}
 				}
@@ -1317,23 +1311,15 @@ void GDScriptAnalyzer::resolve_class_body(GDScriptParser::ClassNode *p_class, co
 
 					} else if (setter_function->parameters.size() != 1) {
 						push_error(vformat(R"(Function "%s" cannot be used as setter because of its signature.)", setter_function->identifier->name), member.variable);
-
-					} else if (!is_type_compatible(member.variable->datatype, setter_function->parameters[0]->datatype, true)) {
+					} else if (is_type_compatible(member.variable->datatype, setter_function->parameters[0]->datatype, true, member.variable) == TypeCompat::ERROR) {
 						push_error(vformat(R"(Function with argument type "%s" cannot be used as setter for a property of type "%s".)", setter_function->parameters[0]->datatype.to_string(), member.variable->datatype.to_string()), member.variable);
-
 					} else {
 						has_valid_setter = true;
-
-#ifdef DEBUG_ENABLED
-						if (member.variable->datatype.builtin_type == Variant::FLOAT && setter_function->parameters[0]->datatype.builtin_type == Variant::INT) {
-							parser->push_warning(member.variable, GDScriptWarning::NARROWING_CONVERSION);
-						}
-#endif
 					}
 				}
 
 				if (member.variable->datatype.is_variant() && has_valid_getter && has_valid_setter) {
-					if (!is_type_compatible(getter_function->datatype, setter_function->parameters[0]->datatype, true)) {
+					if (is_type_compatible(getter_function->datatype, setter_function->parameters[0]->datatype, true) == TypeCompat::ERROR) {
 						push_error(vformat(R"(Getter with type "%s" cannot be used along with setter of type "%s".)", getter_function->datatype.to_string(), setter_function->parameters[0]->datatype.to_string()), member.variable);
 					}
 				}
@@ -1843,26 +1829,28 @@ void GDScriptAnalyzer::resolve_assignable(GDScriptParser::AssignableNode *p_assi
 			} else {
 				type.type_source = GDScriptParser::DataType::INFERRED;
 			}
-		} else if (!specified_type.is_variant()) {
-			if (initializer_type.is_variant() || !initializer_type.is_hard_type()) {
-				mark_node_unsafe(p_assignable->initializer);
-				p_assignable->use_conversion_assign = true;
-				if (!initializer_type.is_variant() && !is_type_compatible(specified_type, initializer_type, true, p_assignable->initializer)) {
-					downgrade_node_type_source(p_assignable->initializer);
-				}
-			} else if (!is_type_compatible(specified_type, initializer_type, true, p_assignable->initializer)) {
-				if (!is_constant && is_type_compatible(initializer_type, specified_type)) {
+		} else {
+			bool err = false;
+			switch (is_type_compatible(specified_type, initializer_type, true, p_assignable->initializer)) {
+				case TypeCompat::ERROR:
+					err = true;
+					break;
+				case TypeCompat::UNSAFE:
+					if (is_constant) {
+						err = true;
+						break;
+					}
 					mark_node_unsafe(p_assignable->initializer);
 					p_assignable->use_conversion_assign = true;
-				} else {
-					push_error(vformat(R"(Cannot assign a value of type %s to %s "%s" with specified type %s.)", initializer_type.to_string(), p_kind, p_assignable->identifier->name, specified_type.to_string()), p_assignable->initializer);
-				}
-			} else if (specified_type.has_container_element_type() && !initializer_type.has_container_element_type()) {
-				mark_node_unsafe(p_assignable->initializer);
-#ifdef DEBUG_ENABLED
-			} else if (specified_type.builtin_type == Variant::INT && initializer_type.builtin_type == Variant::FLOAT) {
-				parser->push_warning(p_assignable->initializer, GDScriptWarning::NARROWING_CONVERSION);
-#endif
+					if (!initializer_type.is_variant()) {
+						downgrade_node_type_source(p_assignable->initializer);
+					}
+					break;
+				case TypeCompat::SAFE:
+					break; // Nothing to do.
+			}
+			if (err) {
+				push_error(vformat(R"(Cannot assign a value of type %s to %s "%s" with specified type %s.)", initializer_type.to_string(), p_kind, p_assignable->identifier->name, specified_type.to_string()), p_assignable->initializer);
 			}
 		}
 	}
@@ -2017,8 +2005,8 @@ void GDScriptAnalyzer::resolve_for(GDScriptParser::ForNode *p_for) {
 		} else if (list_type.has_container_element_type()) {
 			variable_type = list_type.get_container_element_type();
 			variable_type.type_source = list_type.type_source;
-		} else if (list_type.is_typed_container_type()) {
-			variable_type = list_type.get_typed_container_type();
+		} else if (list_type.is_packed_array_type()) {
+			variable_type = list_type.get_packed_array_element_type();
 			variable_type.type_source = list_type.type_source;
 		} else if (list_type.builtin_type == Variant::INT || list_type.builtin_type == Variant::FLOAT || list_type.builtin_type == Variant::STRING) {
 			variable_type.type_source = list_type.type_source;
@@ -2245,21 +2233,19 @@ void GDScriptAnalyzer::resolve_return(GDScriptParser::ReturnNode *p_return) {
 		result.is_constant = true;
 	}
 
-	if (has_expected_type && !expected_type.is_variant()) {
-		if (result.is_variant() || !result.is_hard_type()) {
-			mark_node_unsafe(p_return);
-			if (!is_type_compatible(expected_type, result, true, p_return)) {
-				downgrade_node_type_source(p_return);
-			}
-		} else if (!is_type_compatible(expected_type, result, true, p_return)) {
-			mark_node_unsafe(p_return);
-			if (!is_type_compatible(result, expected_type)) {
+	if (has_expected_type) {
+		switch (is_type_compatible(expected_type, result, true, p_return)) {
+			case TypeCompat::ERROR:
 				push_error(vformat(R"(Cannot return value of type "%s" because the function return type is "%s".)", result.to_string(), expected_type.to_string()), p_return);
-			}
-#ifdef DEBUG_ENABLED
-		} else if (expected_type.builtin_type == Variant::INT && result.builtin_type == Variant::FLOAT) {
-			parser->push_warning(p_return, GDScriptWarning::NARROWING_CONVERSION);
-#endif
+				break;
+			case TypeCompat::UNSAFE:
+				mark_node_unsafe(p_return);
+				if (!result.is_hard_type()) {
+					downgrade_node_type_source(p_return);
+				}
+				break;
+			case TypeCompat::SAFE:
+				break; // Nothing to do.
 		}
 	}
 
@@ -2397,17 +2383,18 @@ void GDScriptAnalyzer::update_const_expression_builtin_type(GDScriptParser::Expr
 
 	GDScriptParser::DataType expression_type = p_expression->get_datatype();
 	bool is_enum_cast = p_is_cast && p_type.kind == GDScriptParser::DataType::ENUM && p_type.is_meta_type == false && expression_type.builtin_type == Variant::INT;
-	if (!is_enum_cast && !is_type_compatible(p_type, expression_type, true, p_expression)) {
+	if (!is_enum_cast && is_type_compatible(p_type, expression_type, true, p_expression) == TypeCompat::ERROR) {
 		push_error(vformat(R"(Cannot %s a value of type "%s" as "%s".)", p_usage, expression_type.to_string(), p_type.to_string()), p_expression);
 		return;
 	}
 
 	GDScriptParser::DataType value_type = type_from_variant(p_expression->reduced_value, p_expression);
-	if (expression_type.is_variant() && !is_enum_cast && !is_type_compatible(p_type, value_type, true, p_expression)) {
+	if (expression_type.is_variant() && !is_enum_cast && is_type_compatible(p_type, value_type, true, p_expression) == TypeCompat::ERROR) {
 		push_error(vformat(R"(Cannot %s a value of type "%s" as "%s".)", p_usage, value_type.to_string(), p_type.to_string()), p_expression);
 		return;
 	}
 
+// TODO
 #ifdef DEBUG_ENABLED
 	if (p_type.kind == GDScriptParser::DataType::ENUM && value_type.builtin_type == Variant::INT && !enum_has_value(p_type, p_expression->reduced_value)) {
 		parser->push_warning(p_expression, GDScriptWarning::INT_AS_ENUM_WITHOUT_MATCH, p_usage, p_expression->reduced_value.stringify(), p_type.to_string());
@@ -2428,6 +2415,7 @@ void GDScriptAnalyzer::update_const_expression_builtin_type(GDScriptParser::Expr
 		return;
 	}
 
+// TODO
 #ifdef DEBUG_ENABLED
 	if (p_type.builtin_type == Variant::INT && value_type.builtin_type == Variant::FLOAT) {
 		parser->push_warning(p_expression, GDScriptWarning::NARROWING_CONVERSION);
@@ -2451,13 +2439,16 @@ void GDScriptAnalyzer::update_array_literal_element_type(GDScriptParser::ArrayNo
 			mark_node_unsafe(element_node);
 			continue;
 		}
-		if (!is_type_compatible(p_element_type, element_type, true, p_array)) {
-			if (is_type_compatible(element_type, p_element_type)) {
+
+		switch (is_type_compatible(p_element_type, element_type, true, p_array)) {
+			case TypeCompat::ERROR:
+				push_error(vformat(R"(Cannot have an element of type "%s" in an array of type "Array[%s]".)", element_type.to_string(), p_element_type.to_string()), element_node);
+				return;
+			case TypeCompat::UNSAFE:
 				mark_node_unsafe(element_node);
-				continue;
-			}
-			push_error(vformat(R"(Cannot have an element of type "%s" in an array of type "Array[%s]".)", element_type.to_string(), p_element_type.to_string()), element_node);
-			return;
+				continue; // Next element.
+			case TypeCompat::SAFE:
+				break; // Nothing to do.
 		}
 	}
 
@@ -2561,7 +2552,7 @@ void GDScriptAnalyzer::reduce_assignment(GDScriptParser::AssignmentNode *p_assig
 			// hard non-variant assignee and weak assigned
 			mark_node_unsafe(p_assignment);
 			p_assignment->use_conversion_assign = true;
-			downgrades_assigned = downgrades_assigned || (!assigned_is_variant && !is_type_compatible(assignee_type, op_type, true, p_assignment->assigned_value));
+			downgrades_assigned = downgrades_assigned || (!assigned_is_variant && is_type_compatible(assignee_type, op_type, true, p_assignment->assigned_value) == TypeCompat::ERROR);
 		} else if (compatible) {
 			if (op_type.is_variant()) {
 				// non-variant assignee and variant result
@@ -2573,24 +2564,22 @@ void GDScriptAnalyzer::reduce_assignment(GDScriptParser::AssignmentNode *p_assig
 					// weak non-variant assignee and variant result
 					downgrades_assignee = true;
 				}
-			} else if (!is_type_compatible(assignee_type, op_type, assignee_is_hard, p_assignment->assigned_value)) {
-				// non-variant assignee and incompatible result
-				mark_node_unsafe(p_assignment);
-				if (assignee_is_hard) {
-					if (is_type_compatible(op_type, assignee_type)) {
-						// hard non-variant assignee and maybe compatible result
-						p_assignment->use_conversion_assign = true;
-					} else {
-						// hard non-variant assignee and incompatible result
+			} else {
+				switch (is_type_compatible(assignee_type, op_type, assignee_is_hard, p_assignment->assigned_value)) {
+					case TypeCompat::ERROR:
 						push_error(vformat(R"(Value of type "%s" cannot be assigned to a variable of type "%s".)", assigned_value_type.to_string(), assignee_type.to_string()), p_assignment->assigned_value);
-					}
-				} else {
-					// weak non-variant assignee and incompatible result
-					downgrades_assignee = true;
+						break;
+					case TypeCompat::UNSAFE:
+						mark_node_unsafe(p_assignment);
+						if (assignee_is_hard) {
+							p_assignment->use_conversion_assign = true;
+						} else {
+							downgrades_assignee = true;
+						}
+						break;
+					case TypeCompat::SAFE:
+						break; // Nothing to do.
 				}
-			} else if (assignee_type.has_container_element_type() && !op_type.has_container_element_type()) {
-				// typed array assignee and untyped array result
-				mark_node_unsafe(p_assignment);
 			}
 		}
 	}
@@ -2898,15 +2887,9 @@ void GDScriptAnalyzer::reduce_call(GDScriptParser::CallNode *p_call, bool p_is_a
 					for (int i = 0; i < p_call->arguments.size(); i++) {
 						GDScriptParser::DataType par_type = type_from_property(info.arguments[i], true);
 
-						if (!is_type_compatible(par_type, p_call->arguments[i]->get_datatype(), true)) {
+						if (is_type_compatible(par_type, p_call->arguments[i]->get_datatype(), true, p_call->arguments[i]) == TypeCompat::ERROR) {
 							types_match = false;
 							break;
-#ifdef DEBUG_ENABLED
-						} else {
-							if (par_type.builtin_type == Variant::INT && p_call->arguments[i]->get_datatype().builtin_type == Variant::FLOAT && builtin_type != Variant::INT) {
-								parser->push_warning(p_call, GDScriptWarning::NARROWING_CONVERSION, p_call->function_name);
-							}
-#endif
 						}
 					}
 
@@ -3260,7 +3243,7 @@ void GDScriptAnalyzer::reduce_cast(GDScriptParser::CastNode *p_cast) {
 			} else if (op_type.kind == GDScriptParser::DataType::BUILTIN && cast_type.kind == GDScriptParser::DataType::BUILTIN) {
 				valid = Variant::can_convert(op_type.builtin_type, cast_type.builtin_type);
 			} else if (op_type.kind != GDScriptParser::DataType::BUILTIN && cast_type.kind != GDScriptParser::DataType::BUILTIN) {
-				valid = is_type_compatible(cast_type, op_type) || is_type_compatible(op_type, cast_type);
+				valid = is_type_compatible(cast_type, op_type) != TypeCompat::ERROR || is_type_compatible(op_type, cast_type) != TypeCompat::ERROR;
 			}
 
 			if (!valid) {
@@ -4285,9 +4268,9 @@ void GDScriptAnalyzer::reduce_ternary_op(GDScriptParser::TernaryOpNode *p_ternar
 		result.kind = GDScriptParser::DataType::VARIANT;
 	} else {
 		result = true_type;
-		if (!is_type_compatible(true_type, false_type)) {
+		if (is_type_compatible(true_type, false_type) == TypeCompat::ERROR) {
 			result = false_type;
-			if (!is_type_compatible(false_type, true_type)) {
+			if (is_type_compatible(false_type, true_type) == TypeCompat::ERROR) {
 				result.kind = GDScriptParser::DataType::VARIANT;
 #ifdef DEBUG_ENABLED
 				parser->push_warning(p_ternary_op, GDScriptWarning::INCOMPATIBLE_TERNARY);
@@ -4324,19 +4307,18 @@ void GDScriptAnalyzer::reduce_type_test(GDScriptParser::TypeTestNode *p_type_tes
 		p_type_test->is_constant = true;
 		p_type_test->reduced_value = false;
 
-		if (!is_type_compatible(test_type, operand_type)) {
+		if (is_type_compatible(test_type, operand_type) == TypeCompat::ERROR) {
 			push_error(vformat(R"(Expression is of type "%s" so it can't be of type "%s".)", operand_type.to_string(), test_type.to_string()), p_type_test->operand);
-		} else if (is_type_compatible(test_type, type_from_variant(p_type_test->operand->reduced_value, p_type_test->operand))) {
+		} else if (is_type_compatible(test_type, type_from_variant(p_type_test->operand->reduced_value, p_type_test->operand)) != TypeCompat::ERROR) {
 			p_type_test->reduced_value = test_type.builtin_type != Variant::OBJECT || !p_type_test->operand->reduced_value.is_null();
 		}
 
 		return;
 	}
 
-	if (!is_type_compatible(test_type, operand_type) && !is_type_compatible(operand_type, test_type)) {
-		if (operand_type.is_hard_type()) {
-			push_error(vformat(R"(Expression is of type "%s" so it can't be of type "%s".)", operand_type.to_string(), test_type.to_string()), p_type_test->operand);
-		} else {
+	if (is_type_compatible(test_type, operand_type) == TypeCompat::ERROR) {
+		push_error(vformat(R"(Expression is of type "%s" so it can't be of type "%s".)", operand_type.to_string(), test_type.to_string()), p_type_test->operand);
+		if (!operand_type.is_hard_type()) {
 			downgrade_node_type_source(p_type_test->operand);
 		}
 	}
@@ -4632,6 +4614,43 @@ GDScriptParser::DataType GDScriptAnalyzer::type_from_metatype(const GDScriptPars
 	return result;
 }
 
+GDScriptParser::DataType GDScriptAnalyzer::get_first_order_type(const GDScriptParser::DataType &p_type) {
+	if (!p_type.is_meta_type) {
+		return p_type;
+	}
+
+	GDScriptParser::DataType result;
+	switch (p_type.kind) {
+		case GDScriptParser::DataType::NATIVE:
+			result.kind = GDScriptParser::DataType::NATIVE;
+			result.builtin_type = Variant::OBJECT;
+			result.native_type = GDScriptNativeClass::get_class_static();
+			break;
+		case GDScriptParser::DataType::SCRIPT:
+			result.kind = GDScriptParser::DataType::NATIVE;
+			result.builtin_type = Variant::OBJECT;
+			result.native_type = p_type.script_type.is_valid() ? p_type.script_type->get_class_name() : StringName(Script::get_class_static());
+			break;
+		case GDScriptParser::DataType::CLASS:
+			result.kind = GDScriptParser::DataType::NATIVE;
+			result.builtin_type = Variant::OBJECT;
+			result.native_type = GDScript::get_class_static();
+			break;
+		case GDScriptParser::DataType::ENUM:
+			result.kind = GDScriptParser::DataType::BUILTIN;
+			result.builtin_type = Variant::DICTIONARY;
+			break;
+		default:
+			ERR_PRINT("GDScript bug (please report): Invalid metatype.");
+			result = p_type;
+			result.is_meta_type = false;
+			result.is_pseudo_type = false;
+			result.is_constant = false;
+			break;
+	}
+	return result;
+}
+
 GDScriptParser::DataType GDScriptAnalyzer::type_from_property(const PropertyInfo &p_property, bool p_is_arg, bool p_is_readonly) const {
 	GDScriptParser::DataType result;
 	result.is_read_only = p_is_readonly;
@@ -4889,23 +4908,17 @@ void GDScriptAnalyzer::validate_call_arg(const List<GDScriptParser::DataType> &p
 		}
 		GDScriptParser::DataType arg_type = p_call->arguments[i]->get_datatype();
 
-		if (arg_type.is_variant() || !arg_type.is_hard_type()) {
-			// Argument can be anything, so this is unsafe (unless the parameter is a hard variant).
-			if (!(par_type.is_hard_type() && par_type.is_variant())) {
-				mark_node_unsafe(p_call->arguments[i]);
-			}
-		} else if (par_type.is_hard_type() && !is_type_compatible(par_type, arg_type, true)) {
-			// Supertypes are acceptable for dynamic compliance, but it's unsafe.
-			mark_node_unsafe(p_call);
-			if (!is_type_compatible(arg_type, par_type)) {
+		switch (is_type_compatible(par_type, arg_type, true, p_call->arguments[i])) {
+			case TypeCompat::ERROR:
 				push_error(vformat(R"*(Invalid argument for "%s()" function: argument %d should be "%s" but is "%s".)*",
 								   p_call->function_name, i + 1, par_type.to_string(), arg_type.to_string()),
 						p_call->arguments[i]);
-			}
-#ifdef DEBUG_ENABLED
-		} else if (par_type.kind == GDScriptParser::DataType::BUILTIN && par_type.builtin_type == Variant::INT && arg_type.kind == GDScriptParser::DataType::BUILTIN && arg_type.builtin_type == Variant::FLOAT) {
-			parser->push_warning(p_call, GDScriptWarning::NARROWING_CONVERSION, p_call->function_name);
-#endif
+				break;
+			case TypeCompat::UNSAFE:
+				mark_node_unsafe(p_call->arguments[i]);
+				break;
+			case TypeCompat::SAFE:
+				break; // Nothing to do.
 		}
 	}
 }
@@ -5039,151 +5052,184 @@ GDScriptParser::DataType GDScriptAnalyzer::get_operation_type(Variant::Operator 
 	return result;
 }
 
-// TODO: Add safe/unsafe return variable (for variant cases)
-bool GDScriptAnalyzer::is_type_compatible(const GDScriptParser::DataType &p_target, const GDScriptParser::DataType &p_source, bool p_allow_implicit_conversion, const GDScriptParser::Node *p_source_node) {
-	// These return "true" so it doesn't affect users negatively.
-	ERR_FAIL_COND_V_MSG(!p_target.is_set(), true, "Parser bug (please report): Trying to check compatibility of unset target type");
-	ERR_FAIL_COND_V_MSG(!p_source.is_set(), true, "Parser bug (please report): Trying to check compatibility of unset value type");
+// TODO: Remove supertype/subtype mentions from comments.
+GDScriptAnalyzer::TypeCompat GDScriptAnalyzer::is_type_compatible(const GDScriptParser::DataType &p_target, const GDScriptParser::DataType &p_source, bool p_allow_implicit_conversion, const GDScriptParser::Node *p_source_node) {
+	// These don't return `TypeCompat::ERROR` so it doesn't affect users negatively.
+	ERR_FAIL_COND_V_MSG(!p_target.is_set(), TypeCompat::UNSAFE, "GDScript bug (please report): Trying to check compatibility of unset target type.");
+	ERR_FAIL_COND_V_MSG(!p_source.is_set(), TypeCompat::UNSAFE, "GDScript bug (please report): Trying to check compatibility of unset source type.");
 
-	if (p_target.kind == GDScriptParser::DataType::VARIANT) {
-		// Variant can receive anything.
-		return true;
+	if (p_target.kind == GDScriptParser::DataType::VARIANT && p_target.is_hard_type()) {
+		// `p_target` can receive anything (hard `Variant`).
+		return TypeCompat::SAFE;
+	} else if (p_target.kind == GDScriptParser::DataType::VARIANT || !p_target.is_hard_type()) {
+		// `p_target` can be anything (weak `Variant`).
+		return TypeCompat::UNSAFE;
 	}
 
-	if (p_source.kind == GDScriptParser::DataType::VARIANT) {
-		// TODO: This is acceptable but unsafe. Make sure unsafe line is set.
-		return true;
+	if (p_source.kind == GDScriptParser::DataType::VARIANT || !p_source.is_hard_type()) {
+		// `p_source` can be anything. It's unsafe, except `p_target` is a hard `Variant` (already handled before).
+		return TypeCompat::UNSAFE;
 	}
+
+	// From here both `p_target` and `p_source` are resolved, hard, and non-`Variant`.
 
 	if (p_target.kind == GDScriptParser::DataType::BUILTIN) {
-		bool valid = p_source.kind == GDScriptParser::DataType::BUILTIN && p_target.builtin_type == p_source.builtin_type;
-		if (!valid && p_allow_implicit_conversion) {
-			valid = Variant::can_convert_strict(p_source.builtin_type, p_target.builtin_type);
-		}
-		if (!valid && p_target.builtin_type == Variant::INT && p_source.kind == GDScriptParser::DataType::ENUM && !p_source.is_meta_type) {
+		if (p_target.builtin_type == Variant::INT && p_source.kind == GDScriptParser::DataType::ENUM && !p_source.is_meta_type) {
 			// Enum value is also integer.
-			valid = true;
+			return TypeCompat::SAFE;
 		}
-		if (valid && p_target.builtin_type == Variant::ARRAY && p_source.builtin_type == Variant::ARRAY) {
-			// Check the element type.
-			if (p_target.has_container_element_type() && p_source.has_container_element_type()) {
-				valid = p_target.get_container_element_type() == p_source.get_container_element_type();
+		if (p_target.builtin_type == Variant::ARRAY && p_source.builtin_type == Variant::ARRAY) {
+			if (p_target.is_typed_container_type()) {
+				if (p_source.is_typed_container_type()) {
+					if (p_target.get_container_element_type() == p_source.get_container_element_type()) {
+						// The element types are equal.
+						return TypeCompat::SAFE;
+					} else {
+						// The element types **must** be equal, a supertype will not work.
+						// For example, `Array[Object]` is **not** a supertype of `Array[Node]`.
+						// `object_array[0] = node` is valid, but `object_array = node_array` is invalid.
+						return TypeCompat::ERROR;
+					}
+				} else {
+					// A typed array cannot be a supertype of untyped array.
+					return TypeCompat::ERROR; // TODO: Unsafe?!
+				}
+			} else if (p_source.is_typed_container_type()) {
+				// Untyped array (`Array` aka `Array[Variant]`) **is** a supertype of any `Array` type (including typed arrays).
+				// This is unsafe, but the exception was intentionally added for the convenience of untyped GDScript users.
+				return TypeCompat::UNSAFE;
+			} else {
+				// Both `p_target` and `p_source` are untyped arrays.
+				return TypeCompat::SAFE;
 			}
 		}
-		return valid;
+		if (p_source.kind == GDScriptParser::DataType::BUILTIN && p_target.builtin_type == p_source.builtin_type) {
+			return TypeCompat::SAFE;
+		}
+		if (p_allow_implicit_conversion && Variant::can_convert_strict(p_source.builtin_type, p_target.builtin_type)) {
+#ifdef DEBUG_ENABLED
+			if (p_source_node && p_target.builtin_type == Variant::INT && p_source.builtin_type == Variant::FLOAT) {
+				parser->push_warning(p_source_node, GDScriptWarning::NARROWING_CONVERSION);
+			}
+#endif
+			return TypeCompat::SAFE; // TODO: `TypeCompat::SAFE_CONVERT`?
+		}
+		return TypeCompat::ERROR;
 	}
 
-	if (p_target.kind == GDScriptParser::DataType::ENUM) {
+	if (p_target.kind == GDScriptParser::DataType::ENUM) { // TODO: Check metatype.
 		if (p_source.kind == GDScriptParser::DataType::BUILTIN && p_source.builtin_type == Variant::INT) {
 #ifdef DEBUG_ENABLED
 			if (p_source_node) {
 				parser->push_warning(p_source_node, GDScriptWarning::INT_AS_ENUM_WITHOUT_CAST);
 			}
 #endif
-			return true;
+			// Enum value is just an `int` at runtime, but we still mark it as unsafe.
+			return TypeCompat::UNSAFE;
 		}
-		if (p_source.kind == GDScriptParser::DataType::ENUM) {
+		if (p_source.kind == GDScriptParser::DataType::ENUM) { // TODO: Check metatype.
 			if (p_source.native_type == p_target.native_type) {
-				return true;
+				return TypeCompat::SAFE;
+			} else {
+#ifdef DEBUG_ENABLED
+				// TODO: Push warning.
+#endif
+				// Enum value is just an `int` at runtime, but we still mark it as unsafe.
+				return TypeCompat::UNSAFE;
 			}
 		}
-		return false;
+		return TypeCompat::ERROR;
 	}
 
-	// From here on the target type is an object, so we have to test polymorphism.
+	// From here `p_target` is an object, so we have to test polymorphism.
 
 	if (p_source.kind == GDScriptParser::DataType::BUILTIN && p_source.builtin_type == Variant::NIL) {
-		// null is acceptable in object.
-		return true;
+		// `null` is acceptable for objects.
+		return TypeCompat::SAFE;
 	}
-
-	StringName src_native;
-	Ref<Script> src_script;
-	const GDScriptParser::ClassNode *src_class = nullptr;
 
 	switch (p_source.kind) {
 		case GDScriptParser::DataType::NATIVE:
-			if (p_target.kind != GDScriptParser::DataType::NATIVE) {
-				// Non-native class cannot be supertype of native.
-				return false;
+		case GDScriptParser::DataType::SCRIPT:
+		case GDScriptParser::DataType::CLASS: {
+			GDScriptParser::DataType target = get_first_order_type(p_target);
+			GDScriptParser::DataType source = get_first_order_type(p_source);
+			if (is_supertype_object_type(target, source)) {
+				return TypeCompat::SAFE;
+			} else if (is_supertype_object_type(source, target)) {
+				return TypeCompat::UNSAFE;
 			}
-			if (p_source.is_meta_type) {
-				src_native = GDScriptNativeClass::get_class_static();
-			} else {
-				src_native = p_source.native_type;
+		} break;
+		default:
+			break;
+	}
+
+	return TypeCompat::ERROR;
+}
+
+// Only for object types! Do not use for other types and metatypes. Try `is_type_compatible()` instead.
+bool GDScriptAnalyzer::is_supertype_object_type(const GDScriptParser::DataType &p_super, const GDScriptParser::DataType &p_sub) {
+	switch (p_super.kind) {
+		case GDScriptParser::DataType::NATIVE:
+			// A script/class type cannot be a supertype of a native type, so skip script/class inheritance.
+			switch (p_sub.kind) {
+				case GDScriptParser::DataType::NATIVE:
+				case GDScriptParser::DataType::SCRIPT:
+				case GDScriptParser::DataType::CLASS:
+					// TODO: Old code uses `get_instance_base_type()` for scripts. Check if it is still correct.
+					return ClassDB::is_parent_class(p_sub.native_type, p_super.native_type);
+				default:
+					ERR_FAIL_V_MSG(false, R"*(GDScript bug (please report): Invalid use of "_is_supertype_class()" method.)*");
 			}
 			break;
 		case GDScriptParser::DataType::SCRIPT:
-			if (p_target.kind == GDScriptParser::DataType::CLASS) {
-				// A script type cannot be a subtype of a GDScript class.
-				return false;
-			}
-			if (p_source.is_meta_type) {
-				src_native = p_source.script_type->get_class_name();
-			} else {
-				src_script = p_source.script_type;
-				src_native = src_script->get_instance_base_type();
-			}
-			break;
-		case GDScriptParser::DataType::CLASS:
-			if (p_source.is_meta_type) {
-				src_native = GDScript::get_class_static();
-			} else {
-				src_class = p_source.class_type;
-				const GDScriptParser::ClassNode *base = src_class;
-				while (base->base_type.kind == GDScriptParser::DataType::CLASS) {
-					base = base->base_type.class_type;
-				}
-				src_native = base->base_type.native_type;
-				src_script = base->base_type.script_type;
-			}
-			break;
-		case GDScriptParser::DataType::VARIANT:
-		case GDScriptParser::DataType::BUILTIN:
-		case GDScriptParser::DataType::ENUM:
-		case GDScriptParser::DataType::RESOLVING:
-		case GDScriptParser::DataType::UNRESOLVED:
-			break; // Already solved before.
-	}
+		case GDScriptParser::DataType::CLASS: {
+			Ref<Script> scr;
+			const GDScriptParser::ClassNode *cls = nullptr;
 
-	switch (p_target.kind) {
-		case GDScriptParser::DataType::NATIVE: {
-			if (p_target.is_meta_type) {
-				return ClassDB::is_parent_class(src_native, GDScriptNativeClass::get_class_static());
+			switch (p_sub.kind) {
+				case GDScriptParser::DataType::NATIVE:
+					return false; // A script/class type cannot be a supertype of a native type.
+				case GDScriptParser::DataType::SCRIPT:
+					if (p_super.kind == GDScriptParser::DataType::CLASS) {
+						return false; // A class type cannot be a supertype of a script type.
+					}
+					scr = p_sub.script_type;
+					break;
+				case GDScriptParser::DataType::CLASS:
+					cls = p_sub.class_type;
+					break;
+				default:
+					ERR_FAIL_V_MSG(false, R"*(GDScript bug (please report): Invalid use of "_is_supertype_class()" method.)*");
 			}
-			return ClassDB::is_parent_class(src_native, p_target.native_type);
-		}
-		case GDScriptParser::DataType::SCRIPT:
-			if (p_target.is_meta_type) {
-				return ClassDB::is_parent_class(src_native, p_target.script_type->get_class_name());
-			}
-			while (src_script.is_valid()) {
-				if (src_script == p_target.script_type) {
-					return true;
-				}
-				src_script = src_script->get_base_script();
-			}
-			return false;
-		case GDScriptParser::DataType::CLASS:
-			if (p_target.is_meta_type) {
-				return ClassDB::is_parent_class(src_native, GDScript::get_class_static());
-			}
-			while (src_class != nullptr) {
-				if (src_class == p_target.class_type || src_class->fqcn == p_target.class_type->fqcn) {
-					return true;
-				}
-				src_class = src_class->base_type.class_type;
-			}
-			return false;
-		case GDScriptParser::DataType::VARIANT:
-		case GDScriptParser::DataType::BUILTIN:
-		case GDScriptParser::DataType::ENUM:
-		case GDScriptParser::DataType::RESOLVING:
-		case GDScriptParser::DataType::UNRESOLVED:
-			break; // Already solved before.
-	}
 
-	return false;
+			// Check if we can reach `p_super` from `p_sub` in the inheritance hierarchy.
+
+			while (cls != nullptr) {
+				if (p_super.kind == GDScriptParser::DataType::CLASS && (cls == p_super.class_type || cls->fqcn == p_super.class_type->fqcn)) {
+					return true; // Reached!
+				} else if (cls->base_type.kind == GDScriptParser::DataType::SCRIPT) {
+					scr = cls->base_type.script_type;
+					break; // Now check scripts.
+				} else if (cls->base_type.kind == GDScriptParser::DataType::CLASS) {
+					cls = cls->base_type.class_type;
+				} else {
+					return false; // Didn't reach.
+				}
+			}
+
+			while (scr.is_valid()) {
+				if (scr == p_super.script_type) {
+					return true; // Reached!
+				}
+				scr = scr->get_base_script();
+			}
+
+			return false; // Didn't reach.
+		} break;
+		default:
+			ERR_FAIL_V_MSG(false, R"*(GDScript bug (please report): Invalid use of "_is_supertype_class()" method.)*");
+	}
 }
 
 void GDScriptAnalyzer::push_error(const String &p_message, const GDScriptParser::Node *p_origin) {

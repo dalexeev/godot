@@ -4331,7 +4331,7 @@ String GDScriptParser::DataType::to_string() const {
 	ERR_FAIL_V_MSG("<unresolved type>", "Kind set outside the enum range.");
 }
 
-static Variant::Type _variant_type_to_typed_array_element_type(Variant::Type p_type) {
+static Variant::Type _variant_type_to_packed_array_element_type(Variant::Type p_type) {
 	switch (p_type) {
 		case Variant::PACKED_BYTE_ARRAY:
 		case Variant::PACKED_INT32_ARRAY:
@@ -4353,14 +4353,14 @@ static Variant::Type _variant_type_to_typed_array_element_type(Variant::Type p_t
 	}
 }
 
-bool GDScriptParser::DataType::is_typed_container_type() const {
-	return kind == GDScriptParser::DataType::BUILTIN && _variant_type_to_typed_array_element_type(builtin_type) != Variant::NIL;
+bool GDScriptParser::DataType::is_packed_array_type() const {
+	return kind == GDScriptParser::DataType::BUILTIN && _variant_type_to_packed_array_element_type(builtin_type) != Variant::NIL;
 }
 
-GDScriptParser::DataType GDScriptParser::DataType::get_typed_container_type() const {
+GDScriptParser::DataType GDScriptParser::DataType::get_packed_array_element_type() const {
 	GDScriptParser::DataType type;
 	type.kind = GDScriptParser::DataType::BUILTIN;
-	type.builtin_type = _variant_type_to_typed_array_element_type(builtin_type);
+	type.builtin_type = _variant_type_to_packed_array_element_type(builtin_type);
 	return type;
 }
 
