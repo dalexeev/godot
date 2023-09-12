@@ -3768,38 +3768,6 @@ GDScriptParser::ParseRule *GDScriptParser::get_rule(GDScriptTokenizer::Token::Ty
 	return &rules[p_token_type];
 }
 
-bool GDScriptParser::SuiteNode::has_local(const StringName &p_name) const {
-	if (locals_indices.has(p_name)) {
-		return true;
-	}
-	if (parent_block != nullptr) {
-		return parent_block->has_local(p_name);
-	}
-	return false;
-}
-
-const GDScriptParser::SuiteNode::Local &GDScriptParser::SuiteNode::get_local(const StringName &p_name) const {
-	if (locals_indices.has(p_name)) {
-		return locals[locals_indices[p_name]];
-	}
-	if (parent_block != nullptr) {
-		return parent_block->get_local(p_name);
-	}
-	return empty;
-}
-
-bool GDScriptParser::AnnotationNode::apply(GDScriptParser *p_this, Node *p_target) {
-	if (is_applied) {
-		return true;
-	}
-	is_applied = true;
-	return (p_this->*(p_this->valid_annotations[name].apply))(this, p_target);
-}
-
-bool GDScriptParser::AnnotationNode::applies_to(uint32_t p_target_kinds) const {
-	return (info->target_kind & p_target_kinds) > 0;
-}
-
 bool GDScriptParser::validate_annotation_arguments(AnnotationNode *p_annotation) {
 	ERR_FAIL_COND_V_MSG(!valid_annotations.has(p_annotation->name), false, vformat(R"(Annotation "%s" not found to validate.)", p_annotation->name));
 
@@ -4287,222 +4255,6 @@ bool GDScriptParser::static_unload_annotation(const AnnotationNode *p_annotation
 	return true;
 }
 
-GDScriptParser::DataType GDScriptParser::SuiteNode::Local::get_datatype() const {
-	switch (type) {
-		case CONSTANT:
-			return constant->get_datatype();
-		case VARIABLE:
-			return variable->get_datatype();
-		case PARAMETER:
-			return parameter->get_datatype();
-		case FOR_VARIABLE:
-		case PATTERN_BIND:
-			return bind->get_datatype();
-		case UNDEFINED:
-			return DataType();
-	}
-	return DataType();
-}
-
-String GDScriptParser::SuiteNode::Local::get_name() const {
-	switch (type) {
-		case SuiteNode::Local::PARAMETER:
-			return "parameter";
-		case SuiteNode::Local::CONSTANT:
-			return "constant";
-		case SuiteNode::Local::VARIABLE:
-			return "variable";
-		case SuiteNode::Local::FOR_VARIABLE:
-			return "for loop iterator";
-		case SuiteNode::Local::PATTERN_BIND:
-			return "pattern bind";
-		case SuiteNode::Local::UNDEFINED:
-			return "<undefined>";
-		default:
-			return String();
-	}
-}
-
-String GDScriptParser::DataType::to_string() const {
-	switch (kind) {
-		case VARIANT:
-			return "Variant";
-		case BUILTIN:
-			if (builtin_type == Variant::NIL) {
-				return "null";
-			}
-			if (builtin_type == Variant::ARRAY && has_container_element_type()) {
-				return vformat("Array[%s]", container_element_type->to_string());
-			}
-			return Variant::get_type_name(builtin_type);
-		case NATIVE:
-			if (is_meta_type) {
-				return GDScriptNativeClass::get_class_static();
-			}
-			return native_type.operator String();
-		case CLASS:
-			if (class_type->identifier != nullptr) {
-				return class_type->identifier->name.operator String();
-			}
-			return class_type->fqcn;
-		case SCRIPT: {
-			if (is_meta_type) {
-				return script_type != nullptr ? script_type->get_class_name().operator String() : "";
-			}
-			String name = script_type != nullptr ? script_type->get_name() : "";
-			if (!name.is_empty()) {
-				return name;
-			}
-			name = script_path;
-			if (!name.is_empty()) {
-				return name;
-			}
-			return native_type.operator String();
-		}
-		case ENUM: {
-			// native_type contains either the native class defining the enum
-			// or the fully qualified class name of the script defining the enum
-			return String(native_type).get_file(); // Remove path, keep filename
-		}
-		case RESOLVING:
-		case UNRESOLVED:
-			return "<unresolved type>";
-	}
-
-	ERR_FAIL_V_MSG("<unresolved type>", "Kind set outside the enum range.");
-}
-
-PropertyInfo GDScriptParser::DataType::to_property_info(const String &p_name) const {
-	PropertyInfo result;
-	result.name = p_name;
-	result.usage = PROPERTY_USAGE_NONE;
-
-	if (!is_hard_type()) {
-		result.usage |= PROPERTY_USAGE_NIL_IS_VARIANT;
-		return result;
-	}
-
-	switch (kind) {
-		case BUILTIN:
-			result.type = builtin_type;
-			if (builtin_type == Variant::ARRAY && has_container_element_type()) {
-				const DataType *elem_type = container_element_type;
-				switch (elem_type->kind) {
-					case BUILTIN:
-						result.hint = PROPERTY_HINT_ARRAY_TYPE;
-						result.hint_string = Variant::get_type_name(elem_type->builtin_type);
-						break;
-					case NATIVE:
-						result.hint = PROPERTY_HINT_ARRAY_TYPE;
-						result.hint_string = elem_type->native_type;
-						break;
-					case SCRIPT:
-						result.hint = PROPERTY_HINT_ARRAY_TYPE;
-						if (elem_type->script_type.is_valid() && elem_type->script_type->get_global_name() != StringName()) {
-							result.hint_string = elem_type->script_type->get_global_name();
-						} else {
-							result.hint_string = elem_type->native_type;
-						}
-						break;
-					case CLASS:
-						result.hint = PROPERTY_HINT_ARRAY_TYPE;
-						if (elem_type->class_type != nullptr && elem_type->class_type->get_global_name() != StringName()) {
-							result.hint_string = elem_type->class_type->get_global_name();
-						} else {
-							result.hint_string = elem_type->native_type;
-						}
-						break;
-					case ENUM:
-						result.hint = PROPERTY_HINT_ARRAY_TYPE;
-						result.hint_string = String(elem_type->native_type).replace("::", ".");
-						break;
-					case VARIANT:
-					case RESOLVING:
-					case UNRESOLVED:
-						break;
-				}
-			}
-			break;
-		case NATIVE:
-			result.type = Variant::OBJECT;
-			if (is_meta_type) {
-				result.class_name = GDScriptNativeClass::get_class_static();
-			} else {
-				result.class_name = native_type;
-			}
-			break;
-		case SCRIPT:
-			result.type = Variant::OBJECT;
-			if (is_meta_type) {
-				result.class_name = script_type.is_valid() ? script_type->get_class() : Script::get_class_static();
-			} else if (script_type.is_valid() && script_type->get_global_name() != StringName()) {
-				result.class_name = script_type->get_global_name();
-			} else {
-				result.class_name = native_type;
-			}
-			break;
-		case CLASS:
-			result.type = Variant::OBJECT;
-			if (is_meta_type) {
-				result.class_name = GDScript::get_class_static();
-			} else if (class_type != nullptr && class_type->get_global_name() != StringName()) {
-				result.class_name = class_type->get_global_name();
-			} else {
-				result.class_name = native_type;
-			}
-			break;
-		case ENUM:
-			if (is_meta_type) {
-				result.type = Variant::DICTIONARY;
-			} else {
-				result.type = Variant::INT;
-				result.usage |= PROPERTY_USAGE_CLASS_IS_ENUM;
-				result.class_name = String(native_type).replace("::", ".");
-			}
-			break;
-		case VARIANT:
-		case RESOLVING:
-		case UNRESOLVED:
-			result.usage |= PROPERTY_USAGE_NIL_IS_VARIANT;
-			break;
-	}
-
-	return result;
-}
-
-static Variant::Type _variant_type_to_typed_array_element_type(Variant::Type p_type) {
-	switch (p_type) {
-		case Variant::PACKED_BYTE_ARRAY:
-		case Variant::PACKED_INT32_ARRAY:
-		case Variant::PACKED_INT64_ARRAY:
-			return Variant::INT;
-		case Variant::PACKED_FLOAT32_ARRAY:
-		case Variant::PACKED_FLOAT64_ARRAY:
-			return Variant::FLOAT;
-		case Variant::PACKED_STRING_ARRAY:
-			return Variant::STRING;
-		case Variant::PACKED_VECTOR2_ARRAY:
-			return Variant::VECTOR2;
-		case Variant::PACKED_VECTOR3_ARRAY:
-			return Variant::VECTOR3;
-		case Variant::PACKED_COLOR_ARRAY:
-			return Variant::COLOR;
-		default:
-			return Variant::NIL;
-	}
-}
-
-bool GDScriptParser::DataType::is_typed_container_type() const {
-	return kind == GDScriptParser::DataType::BUILTIN && _variant_type_to_typed_array_element_type(builtin_type) != Variant::NIL;
-}
-
-GDScriptParser::DataType GDScriptParser::DataType::get_typed_container_type() const {
-	GDScriptParser::DataType type;
-	type.kind = GDScriptParser::DataType::BUILTIN;
-	type.builtin_type = _variant_type_to_typed_array_element_type(builtin_type);
-	return type;
-}
-
 void GDScriptParser::complete_extents(Node *p_node) {
 	while (!nodes_in_progress.is_empty() && nodes_in_progress.back()->get() != p_node) {
 		ERR_PRINT("Parser bug: Mismatch in extents tracking stack.");
@@ -4543,7 +4295,81 @@ void GDScriptParser::reset_extents(Node *p_node, Node *p_from) {
 	p_node->rightmost_column = p_from->rightmost_column;
 }
 
-/*---------- PRETTY PRINT FOR DEBUG ----------*/
+/* ===================== GDScriptParser::AnnotationNode ===================== */
+
+bool GDScriptParser::AnnotationNode::apply(GDScriptParser *p_this, Node *p_target) {
+	if (is_applied) {
+		return true;
+	}
+	is_applied = true;
+	return (p_this->*(p_this->valid_annotations[name].apply))(this, p_target);
+}
+
+bool GDScriptParser::AnnotationNode::applies_to(uint32_t p_target_kinds) const {
+	return (info->target_kind & p_target_kinds) > 0;
+}
+
+/* ======================== GDScriptParser::SuiteNode ======================= */
+
+bool GDScriptParser::SuiteNode::has_local(const StringName &p_name) const {
+	if (locals_indices.has(p_name)) {
+		return true;
+	}
+	if (parent_block != nullptr) {
+		return parent_block->has_local(p_name);
+	}
+	return false;
+}
+
+const GDScriptParser::SuiteNode::Local &GDScriptParser::SuiteNode::get_local(const StringName &p_name) const {
+	if (locals_indices.has(p_name)) {
+		return locals[locals_indices[p_name]];
+	}
+	if (parent_block != nullptr) {
+		return parent_block->get_local(p_name);
+	}
+	return empty;
+}
+
+/* ==================== GDScriptParser::SuiteNode::Local ==================== */
+
+GDScriptParser::DataType GDScriptParser::SuiteNode::Local::get_datatype() const {
+	switch (type) {
+		case CONSTANT:
+			return constant->get_datatype();
+		case VARIABLE:
+			return variable->get_datatype();
+		case PARAMETER:
+			return parameter->get_datatype();
+		case FOR_VARIABLE:
+		case PATTERN_BIND:
+			return bind->get_datatype();
+		case UNDEFINED:
+			return DataType();
+	}
+	return DataType();
+}
+
+String GDScriptParser::SuiteNode::Local::get_name() const {
+	switch (type) {
+		case SuiteNode::Local::PARAMETER:
+			return "parameter";
+		case SuiteNode::Local::CONSTANT:
+			return "constant";
+		case SuiteNode::Local::VARIABLE:
+			return "variable";
+		case SuiteNode::Local::FOR_VARIABLE:
+			return "for loop iterator";
+		case SuiteNode::Local::PATTERN_BIND:
+			return "pattern bind";
+		case SuiteNode::Local::UNDEFINED:
+			return "<undefined>";
+		default:
+			return String();
+	}
+}
+
+/* ======================= GDScriptParser::TreePrinter ====================== */
 
 #ifdef DEBUG_ENABLED
 

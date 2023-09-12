@@ -100,59 +100,74 @@ public:
 	struct VariableNode;
 	struct WhileNode;
 
+	// See also `GDScriptDataType` (in `gdscript_function.h`).
 	class DataType {
-	private:
-		// Private access so we can control memory management.
+	private: // For control memory management.
 		DataType *container_element_type = nullptr;
+
+		// A guessed type, mostly for autocompletion in the editor.
+		// Must be a subtype of the hard type (if it is known).
+		DataType *weak_type = nullptr;
 
 	public:
 		enum Kind {
-			BUILTIN,
-			NATIVE,
-			SCRIPT,
-			CLASS, // GDScript.
-			ENUM, // Enumeration.
-			VARIANT, // Can be any type.
+			// TODO: Move `UNRESOLVED` and `RESOLVING` to `Node` (as `UNRESOLVED`/`RESOLVING`/`RESOLVED` enum)?
+			UNRESOLVED, // Not yet resolved.
 			RESOLVING, // Currently resolving.
-			UNRESOLVED,
+			UNKNOWN, // The hard type is unknown ("weak Variant").
+			VARIANT, // The hard type is `Variant` (guaranteed).
+			BUILTIN, // Any `Variant` type excluding `Variant::OBJECT`.
+			NATIVE, // Class registered in `ClassDB`.
+			SCRIPT, // Other language or GDScript from external file.
+			CLASS, // Top-level or inner GDScript class from current file.
+			ENUM, // Global, native, or GDScript enum value.
 		};
-		Kind kind = UNRESOLVED;
 
-		enum TypeSource {
-			UNDETECTED, // Can be any type.
-			INFERRED, // Has inferred type, but still dynamic.
-			ANNOTATED_EXPLICIT, // Has a specific type annotated.
-			ANNOTATED_INFERRED, // Has a static type but comes from the assigned value.
-		};
-		TypeSource type_source = UNDETECTED;
+		Kind kind = UNRESOLVED;
 
 		bool is_constant = false;
 		bool is_read_only = false;
-		bool is_meta_type = false;
-		bool is_pseudo_type = false; // For global names that can't be used standalone.
 		bool is_coroutine = false; // For function calls.
 
 		Variant::Type builtin_type = Variant::NIL;
 		StringName native_type;
-		StringName enum_type; // Enum name or the value name in an enum.
 		Ref<Script> script_type;
 		String script_path;
 		ClassNode *class_type = nullptr;
-
-		MethodInfo method_info; // For callable/signals.
+		StringName enum_type; // Enum name or the value name in an enum.
 		HashMap<StringName, int64_t> enum_values; // For enums.
+		MethodInfo method_info; // For callable/signals.
 
-		_FORCE_INLINE_ bool is_set() const { return kind != RESOLVING && kind != UNRESOLVED; }
-		_FORCE_INLINE_ bool is_resolving() const { return kind == RESOLVING; }
-		_FORCE_INLINE_ bool has_no_type() const { return type_source == UNDETECTED; }
-		_FORCE_INLINE_ bool is_variant() const { return kind == VARIANT || kind == RESOLVING || kind == UNRESOLVED; }
-		_FORCE_INLINE_ bool is_hard_type() const { return type_source > INFERRED; }
+		_FORCE_INLINE_ bool is_resolved() const { return kind > RESOLVING; }
+		_FORCE_INLINE_ bool is_known() const { return kind > UNKNOWN; }
 
-		String to_string() const;
+		// TODO: Add static methods to construct UNKNOWN and VARIANT types?
+
+		String to_string() const; // TODO: `bool p_is_return = false`?
 		PropertyInfo to_property_info(const String &p_name) const;
 
-		_FORCE_INLINE_ void set_container_element_type(const DataType &p_type) {
-			container_element_type = memnew(DataType(p_type));
+		DataType get_metatype() const;
+
+		Trilean is_equal_to(const DataType &p_type) const;
+		Trilean is_supertype_of(const DataType &p_type) const;
+		_FORCE_INLINE_ Trilean is_subtype_of(const DataType &p_type) const { return p_type.is_supertype_of(*this); }
+		Trilean is_compatible_with(const DataType &p_type, bool p_allow_implicit_conversion = false) const;
+
+		bool is_packed_array_type() const;
+		DataType get_packed_array_element_type() const;
+
+		// `Array` and `Array[Variant]` are the same (both untyped).
+		_FORCE_INLINE_ bool is_typed_container_type() const {
+			return container_element_type != nullptr && container_element_type->kind != VARIANT;
+		}
+
+		// If weak type is not set, returns hard type.
+		_FORCE_INLINE_ DataType get_guessed_type() const {
+			return (weak_type != nullptr) ? *weak_type : *this;
+		}
+
+		_FORCE_INLINE_ bool has_container_element_type() const {
+			return container_element_type != nullptr;
 		}
 
 		_FORCE_INLINE_ DataType get_container_element_type() const {
@@ -160,8 +175,9 @@ public:
 			return *container_element_type;
 		}
 
-		_FORCE_INLINE_ bool has_container_element_type() const {
-			return container_element_type != nullptr;
+		_FORCE_INLINE_ void set_container_element_type(const DataType &p_type) {
+			unset_container_element_type();
+			container_element_type = memnew(DataType(p_type));
 		}
 
 		_FORCE_INLINE_ void unset_container_element_type() {
@@ -171,66 +187,57 @@ public:
 			container_element_type = nullptr;
 		}
 
-		bool is_typed_container_type() const;
-
-		GDScriptParser::DataType get_typed_container_type() const;
-
-		bool operator==(const DataType &p_other) const {
-			if (type_source == UNDETECTED || p_other.type_source == UNDETECTED) {
-				return true; // Can be consireded equal for parsing purposes.
-			}
-
-			if (type_source == INFERRED || p_other.type_source == INFERRED) {
-				return true; // Can be consireded equal for parsing purposes.
-			}
-
-			if (kind != p_other.kind) {
-				return false;
-			}
-
-			switch (kind) {
-				case VARIANT:
-					return true; // All variants are the same.
-				case BUILTIN:
-					return builtin_type == p_other.builtin_type;
-				case NATIVE:
-				case ENUM: // Enums use native_type to identify the enum and its base class.
-					return native_type == p_other.native_type;
-				case SCRIPT:
-					return script_type == p_other.script_type;
-				case CLASS:
-					return class_type == p_other.class_type || class_type->fqcn == p_other.class_type->fqcn;
-				case RESOLVING:
-				case UNRESOLVED:
-					break;
-			}
-
-			return false;
+		_FORCE_INLINE_ bool has_weak_type() const {
+			return weak_type != nullptr;
 		}
 
-		bool operator!=(const DataType &p_other) const {
-			return !(this->operator==(p_other));
+		_FORCE_INLINE_ DataType get_weak_type() const {
+			ERR_FAIL_COND_V(weak_type == nullptr, DataType());
+			return *weak_type;
+		}
+
+		_FORCE_INLINE_ void set_weak_type(const DataType &p_type) {
+#ifdef DEBUG_ENABLED
+			ERR_FAIL_COND(p_type.has_weak_type()); // No chains.
+			ERR_FAIL_COND(is_supertype_of(p_type) == Trilean::FALSE);
+#endif
+			unset_weak_type();
+			weak_type = memnew(DataType(p_type));
+		}
+
+		_FORCE_INLINE_ void unset_weak_type() {
+			if (weak_type) {
+				memdelete(weak_type);
+			};
+			weak_type = nullptr;
 		}
 
 		void operator=(const DataType &p_other) {
 			kind = p_other.kind;
-			type_source = p_other.type_source;
-			is_read_only = p_other.is_read_only;
+
 			is_constant = p_other.is_constant;
-			is_meta_type = p_other.is_meta_type;
-			is_pseudo_type = p_other.is_pseudo_type;
+			is_read_only = p_other.is_read_only;
 			is_coroutine = p_other.is_coroutine;
+
 			builtin_type = p_other.builtin_type;
 			native_type = p_other.native_type;
-			enum_type = p_other.enum_type;
 			script_type = p_other.script_type;
 			script_path = p_other.script_path;
 			class_type = p_other.class_type;
-			method_info = p_other.method_info;
+			enum_type = p_other.enum_type;
 			enum_values = p_other.enum_values;
-			unset_container_element_type();
+			method_info = p_other.method_info;
+
 			if (p_other.has_container_element_type()) {
 				set_container_element_type(p_other.get_container_element_type());
+			} else {
+				unset_container_element_type();
+			}
+
+			if (p_other.has_weak_type()) {
+				set_weak_type(p_other.get_weak_type());
+			} else {
+				unset_weak_type();
 			}
 		}
 
@@ -242,6 +249,7 @@ public:
 
 		~DataType() {
 			unset_container_element_type();
+			unset_weak_type();
 		}
 	};
 

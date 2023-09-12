@@ -48,24 +48,33 @@
 #define MATH_CHECKS
 #endif
 
-//this epsilon is for values related to a unit size (scalar or vector len)
+// This epsilon is for values related to a unit size (scalar or vector length).
 #ifdef PRECISE_MATH_CHECKS
 #define UNIT_EPSILON 0.00001
 #else
-//tolerate some more floating point error normally
+// Tolerate some more floating point error normally.
 #define UNIT_EPSILON 0.001
 #endif
 
 #define USEC_TO_SEC(m_usec) ((m_usec) / 1000000.0)
 
+// `enum class` is used to prevent implicit conversions from/to `int`/`bool`.
+enum class Trilean {
+	FALSE,
+	UNKNOWN,
+	TRUE,
+};
+
+#define BOOLEAN_TO_TRILEAN(m_value) ((m_value) ? Trilean::TRUE : Trilean::FALSE)
+
 enum ClockDirection {
 	CLOCKWISE,
-	COUNTERCLOCKWISE
+	COUNTERCLOCKWISE,
 };
 
 enum Orientation {
 	HORIZONTAL,
-	VERTICAL
+	VERTICAL,
 };
 
 enum HorizontalAlignment {
@@ -100,14 +109,14 @@ enum InlineAlignment {
 	// Presets.
 	INLINE_ALIGNMENT_TOP = INLINE_ALIGNMENT_TOP_TO | INLINE_ALIGNMENT_TO_TOP,
 	INLINE_ALIGNMENT_CENTER = INLINE_ALIGNMENT_CENTER_TO | INLINE_ALIGNMENT_TO_CENTER,
-	INLINE_ALIGNMENT_BOTTOM = INLINE_ALIGNMENT_BOTTOM_TO | INLINE_ALIGNMENT_TO_BOTTOM
+	INLINE_ALIGNMENT_BOTTOM = INLINE_ALIGNMENT_BOTTOM_TO | INLINE_ALIGNMENT_TO_BOTTOM,
 };
 
 enum Side {
 	SIDE_LEFT,
 	SIDE_TOP,
 	SIDE_RIGHT,
-	SIDE_BOTTOM
+	SIDE_BOTTOM,
 };
 
 enum Corner {
@@ -123,7 +132,7 @@ enum class EulerOrder {
 	YXZ,
 	YZX,
 	ZXY,
-	ZYX
+	ZYX,
 };
 
 /**

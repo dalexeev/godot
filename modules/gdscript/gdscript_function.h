@@ -44,8 +44,9 @@
 class GDScriptInstance;
 class GDScript;
 
+// See also `GDScriptParser::DataType`.
 class GDScriptDataType {
-private:
+private: // For control memory management.
 	GDScriptDataType *container_element_type = nullptr;
 
 public:
@@ -59,7 +60,7 @@ public:
 
 	Kind kind = UNINITIALIZED;
 
-	bool has_type = false;
+	bool has_type = false; // TODO: Replace with VARIANT enum value?
 	Variant::Type builtin_type = Variant::NIL;
 	StringName native_type;
 	Script *script_type = nullptr;
@@ -67,12 +68,12 @@ public:
 
 	bool is_type(const Variant &p_variant, bool p_allow_implicit_conversion = false) const {
 		if (!has_type) {
-			return true; // Can't type check
+			return true;
 		}
 
 		switch (kind) {
 			case UNINITIALIZED:
-				break;
+				ERR_FAIL_V_MSG(false, "GDScript bug (please report): Uninitialized data type.");
 			case BUILTIN: {
 				Variant::Type var_type = p_variant.get_type();
 				bool valid = builtin_type == var_type;
@@ -144,43 +145,48 @@ public:
 				return valid;
 			} break;
 		}
-		return false;
+
+		ERR_FAIL_V_MSG(false, "Kind set outside the enum range.");
 	}
 
-	void set_container_element_type(const GDScriptDataType &p_element_type) {
-		container_element_type = memnew(GDScriptDataType(p_element_type));
+	_FORCE_INLINE_ bool has_container_element_type() const {
+		return container_element_type != nullptr;
 	}
 
-	GDScriptDataType get_container_element_type() const {
+	_FORCE_INLINE_ GDScriptDataType get_container_element_type() const {
 		ERR_FAIL_COND_V(container_element_type == nullptr, GDScriptDataType());
 		return *container_element_type;
 	}
 
-	bool has_container_element_type() const {
-		return container_element_type != nullptr;
+	_FORCE_INLINE_ void set_container_element_type(const GDScriptDataType &p_element_type) {
+		unset_container_element_type();
+		container_element_type = memnew(GDScriptDataType(p_element_type));
 	}
 
-	void unset_container_element_type() {
+	_FORCE_INLINE_ void unset_container_element_type() {
 		if (container_element_type) {
 			memdelete(container_element_type);
 		}
 		container_element_type = nullptr;
 	}
 
-	GDScriptDataType() = default;
-
 	void operator=(const GDScriptDataType &p_other) {
 		kind = p_other.kind;
+
 		has_type = p_other.has_type;
 		builtin_type = p_other.builtin_type;
 		native_type = p_other.native_type;
 		script_type = p_other.script_type;
 		script_type_ref = p_other.script_type_ref;
-		unset_container_element_type();
+
 		if (p_other.has_container_element_type()) {
 			set_container_element_type(p_other.get_container_element_type());
+		} else {
+			unset_container_element_type();
 		}
 	}
+
+	GDScriptDataType() = default;
 
 	GDScriptDataType(const GDScriptDataType &p_other) {
 		*this = p_other;

@@ -84,7 +84,6 @@ static MethodInfo info_from_utility_func(const StringName &p_function) {
 
 static GDScriptParser::DataType make_callable_type(const MethodInfo &p_info) {
 	GDScriptParser::DataType type;
-	type.type_source = GDScriptParser::DataType::ANNOTATED_EXPLICIT;
 	type.kind = GDScriptParser::DataType::BUILTIN;
 	type.builtin_type = Variant::CALLABLE;
 	type.is_constant = true;
@@ -94,7 +93,6 @@ static GDScriptParser::DataType make_callable_type(const MethodInfo &p_info) {
 
 static GDScriptParser::DataType make_signal_type(const MethodInfo &p_info) {
 	GDScriptParser::DataType type;
-	type.type_source = GDScriptParser::DataType::ANNOTATED_EXPLICIT;
 	type.kind = GDScriptParser::DataType::BUILTIN;
 	type.builtin_type = Variant::SIGNAL;
 	type.is_constant = true;
@@ -104,7 +102,6 @@ static GDScriptParser::DataType make_signal_type(const MethodInfo &p_info) {
 
 static GDScriptParser::DataType make_native_meta_type(const StringName &p_class_name) {
 	GDScriptParser::DataType type;
-	type.type_source = GDScriptParser::DataType::ANNOTATED_EXPLICIT;
 	type.kind = GDScriptParser::DataType::NATIVE;
 	type.builtin_type = Variant::OBJECT;
 	type.native_type = p_class_name;
@@ -115,7 +112,6 @@ static GDScriptParser::DataType make_native_meta_type(const StringName &p_class_
 
 static GDScriptParser::DataType make_script_meta_type(const Ref<Script> &p_script) {
 	GDScriptParser::DataType type;
-	type.type_source = GDScriptParser::DataType::ANNOTATED_EXPLICIT;
 	type.kind = GDScriptParser::DataType::SCRIPT;
 	type.builtin_type = Variant::OBJECT;
 	type.native_type = p_script->get_instance_base_type();
@@ -130,7 +126,6 @@ static GDScriptParser::DataType make_script_meta_type(const Ref<Script> &p_scrip
 // This disambiguates between similarly named enums in base classes or outer classes
 static GDScriptParser::DataType make_enum_type(const StringName &p_enum_name, const String &p_base_name, const bool p_meta = false) {
 	GDScriptParser::DataType type;
-	type.type_source = GDScriptParser::DataType::ANNOTATED_EXPLICIT;
 	type.kind = GDScriptParser::DataType::ENUM;
 	type.builtin_type = p_meta ? Variant::DICTIONARY : Variant::INT;
 	type.enum_type = p_enum_name;
@@ -151,7 +146,7 @@ static GDScriptParser::DataType make_enum_type(const StringName &p_enum_name, co
 static GDScriptParser::DataType make_native_enum_type(const StringName &p_enum_name, const StringName &p_native_class, bool p_meta = true) {
 	// Find out which base class declared the enum, so the name is always the same even when coming from other contexts.
 	StringName native_base = p_native_class;
-	while (true && native_base != StringName()) {
+	while (native_base != StringName()) {
 		if (ClassDB::has_enum(native_base, p_enum_name, true)) {
 			break;
 		}
@@ -191,7 +186,6 @@ static GDScriptParser::DataType make_global_enum_type(const StringName &p_enum_n
 
 static GDScriptParser::DataType make_builtin_meta_type(Variant::Type p_type) {
 	GDScriptParser::DataType type;
-	type.type_source = GDScriptParser::DataType::ANNOTATED_EXPLICIT;
 	type.kind = GDScriptParser::DataType::BUILTIN;
 	type.builtin_type = p_type;
 	type.is_constant = true;
@@ -373,13 +367,13 @@ Error GDScriptAnalyzer::resolve_class_inheritance(GDScriptParser::ClassNode *p_c
 
 	// Set datatype for class.
 	GDScriptParser::DataType class_type;
+	class_type.kind = GDScriptParser::DataType::CLASS;
+	class_type.builtin_type = Variant::OBJECT;
+	//class_type.native_type = ...; // TODO
+	class_type.script_path = parser->script_path;
+	class_type.class_type = p_class;
 	class_type.is_constant = true;
 	class_type.is_meta_type = true;
-	class_type.type_source = GDScriptParser::DataType::ANNOTATED_EXPLICIT;
-	class_type.kind = GDScriptParser::DataType::CLASS;
-	class_type.class_type = p_class;
-	class_type.script_path = parser->script_path;
-	class_type.builtin_type = Variant::OBJECT;
 	p_class->set_datatype(class_type);
 
 	GDScriptParser::DataType result;
@@ -2072,8 +2066,8 @@ void GDScriptAnalyzer::resolve_for(GDScriptParser::ForNode *p_for) {
 		} else if (list_type.has_container_element_type()) {
 			variable_type = list_type.get_container_element_type();
 			variable_type.type_source = list_type.type_source;
-		} else if (list_type.is_typed_container_type()) {
-			variable_type = list_type.get_typed_container_type();
+		} else if (list_type.is_packed_array_type()) {
+			variable_type = list_type.get_packed_array_element_type();
 			variable_type.type_source = list_type.type_source;
 		} else if (list_type.builtin_type == Variant::INT || list_type.builtin_type == Variant::FLOAT || list_type.builtin_type == Variant::STRING) {
 			variable_type.type_source = list_type.type_source;
