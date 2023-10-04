@@ -970,6 +970,10 @@ void GDScript::_get_property_list(List<PropertyInfo> *p_properties) const {
 	}
 }
 
+bool GDScript::_has_method(const StringName &p_method) const {
+	return member_functions.has(p_method) && member_functions[p_method]->is_static();
+}
+
 void GDScript::_bind_methods() {
 	ClassDB::bind_vararg_method(METHOD_FLAGS_DEFAULT, "new", &GDScript::_new, MethodInfo("new"));
 }

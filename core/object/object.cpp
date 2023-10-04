@@ -666,8 +666,11 @@ bool Object::has_method(const StringName &p_method) const {
 	}
 
 	MethodBind *method = ClassDB::get_method(get_class_name(), p_method);
+	if (method != nullptr) {
+		return true;
+	}
 
-	return method != nullptr;
+	return _has_methodv(p_method);
 }
 
 Variant Object::getvar(const Variant &p_key, bool *r_valid) const {

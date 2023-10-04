@@ -560,6 +560,17 @@ protected:                                                                      
 			m_inherits::_notificationv(p_notification, p_reversed);                                                                              \
 		}                                                                                                                                        \
 	}                                                                                                                                            \
+	_FORCE_INLINE_ bool (Object::*_get_has_method() const)(const StringName &p_name) const {                                                     \
+		return (bool(Object::*)(const StringName &) const) & m_class::_has_method;                                                               \
+	}                                                                                                                                            \
+	virtual bool _has_methodv(const StringName &p_method) const override {                                                                       \
+		if (m_class::_get_has_method() != m_inherits::_get_has_method()) {                                                                       \
+			if (_has_method(p_method)) {                                                                                                         \
+				return true;                                                                                                                     \
+			}                                                                                                                                    \
+		}                                                                                                                                        \
+		return m_inherits::_has_methodv(p_method);                                                                                               \
+	}                                                                                                                                            \
                                                                                                                                                  \
 private:
 
@@ -696,6 +707,7 @@ protected:
 	virtual bool _property_can_revertv(const StringName &p_name) const { return false; };
 	virtual bool _property_get_revertv(const StringName &p_name, Variant &r_property) const { return false; };
 	virtual void _notificationv(int p_notification, bool p_reversed) {}
+	virtual bool _has_methodv(const StringName &p_method) const { return false; }
 
 	static void _bind_methods();
 	static void _bind_compatibility_methods() {}
@@ -706,6 +718,7 @@ protected:
 	bool _property_can_revert(const StringName &p_name) const { return false; };
 	bool _property_get_revert(const StringName &p_name, Variant &r_property) const { return false; };
 	void _notification(int p_notification) {}
+	bool _has_method(const StringName &p_method) const { return false; }
 
 	_FORCE_INLINE_ static void (*_get_bind_methods())() {
 		return &Object::_bind_methods;
@@ -733,6 +746,9 @@ protected:
 	}
 	_FORCE_INLINE_ void (Object::*_get_notification() const)(int) {
 		return &Object::_notification;
+	}
+	_FORCE_INLINE_ bool (Object::*_get_has_method() const)(const StringName &p_name) const {
+		return &Object::_has_method;
 	}
 	static void get_valid_parents_static(List<String> *p_parents);
 	static void _get_valid_parents_static(List<String> *p_parents);
