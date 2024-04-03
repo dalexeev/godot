@@ -376,6 +376,7 @@ private:
 	friend class GDScript;
 	friend class GDScriptCompiler;
 	friend class GDScriptByteCodeGenerator;
+	friend class GDScriptQBECodeGenerator;
 	friend class GDScriptLanguage;
 
 	StringName name;
@@ -518,7 +519,7 @@ public:
 	Variant get_constant(int p_idx) const;
 	StringName get_global_name(int p_idx) const;
 
-	Variant call(GDScriptInstance *p_instance, const Variant **p_args, int p_argcount, Callable::CallError &r_err, CallState *p_state = nullptr);
+	virtual Variant call(GDScriptInstance *p_instance, const Variant **p_args, int p_argcount, Callable::CallError &r_err, CallState *p_state = nullptr);
 	void debug_get_stack_member_state(int p_line, List<Pair<StringName, int>> *r_stackvars) const;
 
 #ifdef DEBUG_ENABLED
@@ -528,6 +529,18 @@ public:
 
 	GDScriptFunction();
 	~GDScriptFunction();
+};
+
+class GDScriptQBECodeGenerator;
+
+class GDScriptQBEFunction : public GDScriptFunction {
+	friend class GDScriptQBECodeGenerator;
+
+	String symbol;
+	// TODO: Add func pointer.
+
+public:
+	virtual Variant call(GDScriptInstance *p_instance, const Variant **p_args, int p_argcount, Callable::CallError &r_err, CallState *p_state = nullptr) override;
 };
 
 class GDScriptFunctionState : public RefCounted {

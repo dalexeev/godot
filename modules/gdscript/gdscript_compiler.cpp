@@ -32,6 +32,7 @@
 
 #include "gdscript.h"
 #include "gdscript_byte_codegen.h"
+#include "gdscript_qbe_codegen.h"
 #include "gdscript_cache.h"
 #include "gdscript_utility_functions.h"
 
@@ -2196,7 +2197,8 @@ Error GDScriptCompiler::_parse_block(CodeGen &codegen, const GDScriptParser::Sui
 GDScriptFunction *GDScriptCompiler::_parse_function(Error &r_error, GDScript *p_script, const GDScriptParser::ClassNode *p_class, const GDScriptParser::FunctionNode *p_func, bool p_for_ready, bool p_for_lambda) {
 	r_error = OK;
 	CodeGen codegen;
-	codegen.generator = memnew(GDScriptByteCodeGenerator);
+	//codegen.generator = memnew(GDScriptByteCodeGenerator);
+	codegen.generator = memnew(GDScriptQBECodeGenerator);
 
 	codegen.class_node = p_class;
 	codegen.script = p_script;
@@ -2433,7 +2435,8 @@ GDScriptFunction *GDScriptCompiler::_parse_function(Error &r_error, GDScript *p_
 GDScriptFunction *GDScriptCompiler::_make_static_initializer(Error &r_error, GDScript *p_script, const GDScriptParser::ClassNode *p_class) {
 	r_error = OK;
 	CodeGen codegen;
-	codegen.generator = memnew(GDScriptByteCodeGenerator);
+	//codegen.generator = memnew(GDScriptByteCodeGenerator);
+	codegen.generator = memnew(GDScriptQBECodeGenerator);
 
 	codegen.class_node = p_class;
 	codegen.script = p_script;
