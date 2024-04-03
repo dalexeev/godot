@@ -376,6 +376,7 @@ private:
 	friend class GDScript;
 	friend class GDScriptCompiler;
 	friend class GDScriptByteCodeGenerator;
+	friend class GDScriptNativeCodeGenerator;
 	friend class GDScriptLanguage;
 
 	StringName name;
@@ -451,6 +452,10 @@ private:
 	MethodBind **_methods_ptr = nullptr;
 	GDScriptFunction **_lambdas_ptr = nullptr;
 
+	using NativeFunction = void (*)(int argcount, Variant *stack, Variant *constants, Variant *members, Variant &ret, Callable::CallError &error, int &line, int &resume);
+	NativeFunction native_function = nullptr;
+	String native_symbol;
+
 #ifdef DEBUG_ENABLED
 	CharString func_cname;
 	const char *_func_cname = nullptr;
@@ -518,7 +523,15 @@ public:
 	Variant get_constant(int p_idx) const;
 	StringName get_global_name(int p_idx) const;
 
-	Variant call(GDScriptInstance *p_instance, const Variant **p_args, int p_argcount, Callable::CallError &r_err, CallState *p_state = nullptr);
+private:
+	Variant (GDScriptFunction::*_call)(GDScriptInstance *, const Variant **, int, Callable::CallError &, CallState *) = nullptr;
+	Variant _call_vm(GDScriptInstance *p_instance, const Variant **p_args, int p_argcount, Callable::CallError &r_err, CallState *p_state);
+	Variant _call_native(GDScriptInstance *p_instance, const Variant **p_args, int p_argcount, Callable::CallError &r_err, CallState *p_state);
+
+public:
+	_FORCE_INLINE_ Variant call(GDScriptInstance *p_instance, const Variant **p_args, int p_argcount, Callable::CallError &r_err, CallState *p_state = nullptr) {
+		return (this->*_call)(p_instance, p_args, p_argcount, r_err, p_state);
+	}
 	void debug_get_stack_member_state(int p_line, List<Pair<StringName, int>> *r_stackvars) const;
 
 #ifdef DEBUG_ENABLED

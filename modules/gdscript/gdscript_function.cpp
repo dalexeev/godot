@@ -106,6 +106,7 @@ void GDScriptFunction::debug_get_stack_member_state(int p_line, List<Pair<String
 
 GDScriptFunction::GDScriptFunction() {
 	name = "<anonymous>";
+	_call = &GDScriptFunction::_call_vm;
 #ifdef DEBUG_ENABLED
 	{
 		MutexLock lock(GDScriptLanguage::get_singleton()->mutex);

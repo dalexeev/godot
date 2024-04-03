@@ -438,7 +438,7 @@ void (*type_init_function_table[])(Variant *) = {
 #define METHOD_CALL_ON_NULL_VALUE_ERROR(method_pointer) "Cannot call method '" + (method_pointer)->get_name() + "' on a null value."
 #define METHOD_CALL_ON_FREED_INSTANCE_ERROR(method_pointer) "Cannot call method '" + (method_pointer)->get_name() + "' on a previously freed instance."
 
-Variant GDScriptFunction::call(GDScriptInstance *p_instance, const Variant **p_args, int p_argcount, Callable::CallError &r_err, CallState *p_state) {
+Variant GDScriptFunction::_call_vm(GDScriptInstance *p_instance, const Variant **p_args, int p_argcount, Callable::CallError &r_err, CallState *p_state) {
 	OPCODES_TABLE;
 
 	if (!_code_ptr) {
@@ -3571,6 +3571,160 @@ Variant GDScriptFunction::call(GDScriptInstance *p_instance, const Variant **p_a
 #ifdef DEBUG_ENABLED
 	}
 #endif
+
+	// Always free reserved addresses, since they are never copied.
+	for (int i = 0; i < FIXED_ADDRESSES_MAX; i++) {
+		stack[i].~Variant();
+	}
+
+	call_depth--;
+
+	return retvalue;
+}
+
+Variant GDScriptFunction::_call_native(GDScriptInstance *p_instance, const Variant **p_args, int p_argcount, Callable::CallError &r_err, CallState *p_state) {
+	r_err.error = Callable::CallError::CALL_OK;
+
+	static thread_local int call_depth = 0;
+	if (unlikely(++call_depth > MAX_CALL_DEPTH)) {
+		call_depth--;
+#ifdef DEBUG_ENABLED
+		String err_file;
+		if (p_instance && ObjectDB::get_instance(p_instance->owner_id) != nullptr && p_instance->script->is_valid() && !p_instance->script->path.is_empty()) {
+			err_file = p_instance->script->path;
+		} else if (_script) {
+			err_file = _script->path;
+		}
+		if (err_file.is_empty()) {
+			err_file = "<built-in>";
+		}
+		String err_func = name;
+		if (p_instance && ObjectDB::get_instance(p_instance->owner_id) != nullptr && p_instance->script->is_valid() && p_instance->script->local_name != StringName()) {
+			err_func = p_instance->script->local_name.operator String() + "." + err_func;
+		}
+		int err_line = _initial_line;
+		const char *err_text = "Stack overflow. Check for infinite recursion in your script.";
+		if (!GDScriptLanguage::get_singleton()->debug_break(err_text, false)) {
+			// Debugger break did not happen.
+			_err_print_error(err_func.utf8().get_data(), err_file.utf8().get_data(), err_line, err_text, false, ERR_HANDLER_SCRIPT);
+		}
+#endif
+		return _get_default_variant_for_data_type(return_type);
+	}
+
+	Variant retvalue;
+	Variant *stack = nullptr;
+	uint32_t alloca_size = 0;
+	GDScript *script;
+	int line = _initial_line;
+	int resume = 0;
+
+	if (p_state) {
+		stack = (Variant *)p_state->stack.ptr();
+		line = p_state->line;
+		alloca_size = p_state->stack.size();
+		script = p_state->script;
+		p_instance = p_state->instance;
+		//resume =
+	} else {
+		if (p_argcount != _argument_count) {
+			if (p_argcount > _argument_count) {
+				r_err.error = Callable::CallError::CALL_ERROR_TOO_MANY_ARGUMENTS;
+				r_err.expected = _argument_count;
+				call_depth--;
+				return _get_default_variant_for_data_type(return_type);
+			} else if (p_argcount < _argument_count - _default_arg_count) {
+				r_err.error = Callable::CallError::CALL_ERROR_TOO_FEW_ARGUMENTS;
+				r_err.expected = _argument_count - _default_arg_count;
+				call_depth--;
+				return _get_default_variant_for_data_type(return_type);
+			}
+		}
+
+		alloca_size = sizeof(Variant *) * FIXED_ADDRESSES_MAX + sizeof(Variant *) * _instruction_args_size + sizeof(Variant) * _stack_size;
+
+		uint8_t *aptr = (uint8_t *)alloca(alloca_size);
+		stack = (Variant *)aptr;
+
+		for (int i = 0; i < p_argcount; i++) {
+			if (!argument_types[i].has_type) {
+				memnew_placement(&stack[i + FIXED_ADDRESSES_MAX], Variant(*p_args[i]));
+				continue;
+			}
+			// If types already match, don't call Variant::construct(). Constructors of some types
+			// (e.g. packed arrays) do copies, whereas they pass by reference when inside a Variant.
+			if (argument_types[i].is_type(*p_args[i], false)) {
+				memnew_placement(&stack[i + FIXED_ADDRESSES_MAX], Variant(*p_args[i]));
+				continue;
+			}
+			if (!argument_types[i].is_type(*p_args[i], true)) {
+				r_err.error = Callable::CallError::CALL_ERROR_INVALID_ARGUMENT;
+				r_err.argument = i;
+				r_err.expected = argument_types[i].builtin_type;
+				call_depth--;
+				return _get_default_variant_for_data_type(return_type);
+			}
+			if (argument_types[i].kind == GDScriptDataType::BUILTIN) {
+				Variant arg;
+				Variant::construct(argument_types[i].builtin_type, arg, &p_args[i], 1, r_err);
+				memnew_placement(&stack[i + FIXED_ADDRESSES_MAX], Variant(arg));
+			} else {
+				memnew_placement(&stack[i + FIXED_ADDRESSES_MAX], Variant(*p_args[i]));
+			}
+		}
+		for (int i = p_argcount + FIXED_ADDRESSES_MAX; i < _stack_size; i++) {
+			memnew_placement(&stack[i], Variant);
+		}
+	}
+
+	if (p_instance) {
+		memnew_placement(&stack[ADDR_STACK_SELF], Variant(p_instance->owner));
+		script = p_instance->script.ptr();
+	} else {
+		memnew_placement(&stack[ADDR_STACK_SELF], Variant);
+		script = _script;
+	}
+	memnew_placement(&stack[ADDR_STACK_CLASS], Variant(script));
+	memnew_placement(&stack[ADDR_STACK_NIL], Variant);
+
+	native_function(p_argcount, stack, _constants_ptr, p_instance ? p_instance->members.ptrw() : nullptr, retvalue, r_err, line, resume);
+
+	if (resume != 0) {
+		Ref<GDScriptFunctionState> gdfs = memnew(GDScriptFunctionState);
+		gdfs->function = this;
+
+		gdfs->state.stack.resize(alloca_size);
+
+		// First 3 stack addresses are special, so we just skip them here.
+		for (int i = FIXED_ADDRESSES_MAX; i < _stack_size; i++) {
+			memnew_placement(&gdfs->state.stack.write[sizeof(Variant) * i], Variant(stack[i]));
+		}
+		gdfs->state.stack_size = _stack_size;
+		gdfs->state.alloca_size = alloca_size;
+		//gdfs->state.ip = ip + 2;
+		gdfs->state.line = line;
+		gdfs->state.script = _script;
+		{
+			MutexLock lock(GDScriptLanguage::get_singleton()->mutex);
+			_script->pending_func_states.add(&gdfs->scripts_list);
+			if (p_instance) {
+				gdfs->state.instance = p_instance;
+				p_instance->pending_func_states.add(&gdfs->instances_list);
+			} else {
+				gdfs->state.instance = nullptr;
+			}
+		}
+#ifdef DEBUG_ENABLED
+		gdfs->state.function_name = name;
+		gdfs->state.script_path = _script->get_script_path();
+#endif
+		//gdfs->state.defarg = defarg;
+		//gdfs->function = this;
+
+		//gdfs-> = resume;
+
+		retvalue = gdfs;
+	}
 
 	// Always free reserved addresses, since they are never copied.
 	for (int i = 0; i < FIXED_ADDRESSES_MAX; i++) {
