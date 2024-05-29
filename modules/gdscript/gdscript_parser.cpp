@@ -70,6 +70,12 @@ Variant::Type GDScriptParser::get_builtin_type(const StringName &p_type) {
 	return Variant::VARIANT_MAX;
 }
 
+#ifdef DEBUG_ENABLED
+bool GDScriptParser::is_ignoring_warnings = false;
+bool GDScriptParser::is_excluding_addons = false;
+Vector<String> GDScriptParser::debug_addon_dirs;
+#endif
+
 #ifdef TOOLS_ENABLED
 HashMap<String, String> GDScriptParser::theme_color_names;
 #endif
@@ -90,6 +96,27 @@ void GDScriptParser::get_annotation_list(List<MethodInfo> *r_annotations) const 
 bool GDScriptParser::annotation_exists(const String &p_annotation_name) const {
 	return valid_annotations.has(p_annotation_name);
 }
+
+#ifdef DEBUG_ENABLED
+void GDScriptParser::update_project_settings() {
+	is_ignoring_warnings = !GLOBAL_GET("debug/gdscript/warnings/enable").booleanize();
+	is_excluding_addons = GLOBAL_GET("debug/gdscript/warnings/exclude_addons").booleanize();
+
+	Vector<String> addons_debug;
+	if (ProjectSettings::get_singleton()->has_setting("editor_plugins/debug")) {
+		addons_debug = GLOBAL_GET("editor_plugins/debug");
+	}
+
+	debug_addon_dirs.resize(addons_debug.size());
+	for (int i = 0; i < addons_debug.size(); i++) {
+		if (addons_debug[i].begins_with("res://")) {
+			debug_addon_dirs.write[i] = addons_debug[i].get_base_dir() + "/";
+		} else {
+			debug_addon_dirs.write[i] = "res://addons/" + addons_debug[i] + "/";
+		}
+	}
+}
+#endif
 
 GDScriptParser::GDScriptParser() {
 	// Register valid annotations.
@@ -131,10 +158,6 @@ GDScriptParser::GDScriptParser() {
 		// Networking.
 		register_annotation(MethodInfo("@rpc", PropertyInfo(Variant::STRING, "mode"), PropertyInfo(Variant::STRING, "sync"), PropertyInfo(Variant::STRING, "transfer_mode"), PropertyInfo(Variant::INT, "transfer_channel")), AnnotationInfo::FUNCTION, &GDScriptParser::rpc_annotation, varray("authority", "call_remote", "unreliable", 0));
 	}
-
-#ifdef DEBUG_ENABLED
-	is_ignoring_warnings = !(bool)GLOBAL_GET("debug/gdscript/warnings/enable");
-#endif
 
 #ifdef TOOLS_ENABLED
 	if (theme_color_names.is_empty()) {
@@ -180,9 +203,19 @@ void GDScriptParser::push_warning(const Node *p_source, GDScriptWarning::Code p_
 	if (is_ignoring_warnings) {
 		return;
 	}
-	if (GLOBAL_GET("debug/gdscript/warnings/exclude_addons").booleanize() && script_path.begins_with("res://addons/")) {
-		return;
+	if (is_excluding_addons && script_path.begins_with("res://addons/")) {
+		bool is_debug_addon = false;
+		for (const String &addon_dir : debug_addon_dirs) {
+			if (script_path.begins_with(addon_dir)) {
+				is_debug_addon = true;
+				break;
+			}
+		}
+		if (!is_debug_addon) {
+			return;
+		}
 	}
+
 	GDScriptWarning::WarnLevel warn_level = (GDScriptWarning::WarnLevel)(int)GLOBAL_GET(GDScriptWarning::get_settings_path_from_code(p_code));
 	if (warn_level == GDScriptWarning::IGNORE) {
 		return;

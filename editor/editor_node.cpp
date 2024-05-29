@@ -704,7 +704,18 @@ void EditorNode::_notification(int p_what) {
 		case NOTIFICATION_READY: {
 			{
 				started_timestamp = Time::get_singleton()->get_unix_time_from_system();
+
 				_initializing_plugins = true;
+
+				Vector<String> addons_debug;
+				if (ProjectSettings::get_singleton()->has_setting("editor_plugins/debug")) {
+					addons_debug = GLOBAL_GET("editor_plugins/debug");
+				}
+
+				for (int i = 0; i < addons_debug.size(); i++) {
+					set_addon_debug_enabled(addons_debug[i], true);
+				}
+
 				Vector<String> addons;
 				if (ProjectSettings::get_singleton()->has_setting("editor_plugins/enabled")) {
 					addons = GLOBAL_GET("editor_plugins/enabled");
@@ -713,6 +724,7 @@ void EditorNode::_notification(int p_what) {
 				for (int i = 0; i < addons.size(); i++) {
 					set_addon_plugin_enabled(addons[i], true);
 				}
+
 				_initializing_plugins = false;
 
 				if (!pending_addons.is_empty()) {
@@ -879,6 +891,18 @@ void EditorNode::_remove_plugin_from_enabled(const String &p_name) {
 		}
 	}
 	ps->set("editor_plugins/enabled", enabled_plugins);
+}
+
+void EditorNode::_remove_plugin_from_debug(const String &p_name) {
+	ProjectSettings *ps = ProjectSettings::get_singleton();
+	PackedStringArray plugins_debug = ps->get("editor_plugins/debug");
+	for (int i = 0; i < plugins_debug.size(); ++i) {
+		if (plugins_debug.get(i) == p_name) {
+			plugins_debug.remove_at(i);
+			break;
+		}
+	}
+	ps->set("editor_plugins/debug", plugins_debug);
 }
 
 void EditorNode::_plugin_over_edit(EditorPlugin *p_plugin, Object *p_object) {
@@ -3549,18 +3573,17 @@ void EditorNode::remove_extension_editor_plugin(const StringName &p_class_name) 
 	singleton->editor_data.remove_extension_editor_plugin(p_class_name);
 }
 
-void EditorNode::_update_addon_config() {
+void EditorNode::_update_addon_enabled_config() {
 	if (_initializing_plugins) {
 		return;
 	}
 
 	Vector<String> enabled_addons;
-
 	for (const KeyValue<String, EditorPlugin *> &E : addon_name_to_plugin) {
 		enabled_addons.push_back(E.key);
 	}
 
-	if (enabled_addons.size() == 0) {
+	if (enabled_addons.is_empty()) {
 		ProjectSettings::get_singleton()->set("editor_plugins/enabled", Variant());
 	} else {
 		enabled_addons.sort();
@@ -3585,7 +3608,7 @@ void EditorNode::set_addon_plugin_enabled(const String &p_addon, bool p_enabled,
 		remove_editor_plugin(addon, p_config_changed);
 		memdelete(addon);
 		addon_name_to_plugin.erase(addon_path);
-		_update_addon_config();
+		_update_addon_enabled_config();
 		return;
 	}
 
@@ -3656,7 +3679,7 @@ void EditorNode::set_addon_plugin_enabled(const String &p_addon, bool p_enabled,
 	addon_name_to_plugin[addon_path] = ep;
 	add_editor_plugin(ep, p_config_changed);
 
-	_update_addon_config();
+	_update_addon_enabled_config();
 }
 
 bool EditorNode::is_addon_plugin_enabled(const String &p_addon) const {
@@ -3665,6 +3688,60 @@ bool EditorNode::is_addon_plugin_enabled(const String &p_addon) const {
 	}
 
 	return addon_name_to_plugin.has("res://addons/" + p_addon + "/plugin.cfg");
+}
+
+void EditorNode::_update_addon_debug_config() {
+	if (_initializing_plugins) {
+		return;
+	}
+
+	Vector<String> addons_debug;
+	for (const String &addon_name : addons_debug_enabled) {
+		addons_debug.push_back(addon_name);
+	}
+
+	if (addons_debug.is_empty()) {
+		ProjectSettings::get_singleton()->set("editor_plugins/debug", Variant());
+	} else {
+		addons_debug.sort();
+		ProjectSettings::get_singleton()->set("editor_plugins/debug", addons_debug);
+	}
+
+	project_settings_editor->queue_save();
+}
+
+void EditorNode::set_addon_debug_enabled(const String &p_addon, bool p_enabled) {
+	String addon_path = p_addon;
+
+	if (!addon_path.begins_with("res://")) {
+		addon_path = "res://addons/" + addon_path + "/plugin.cfg";
+	}
+
+	ERR_FAIL_COND(p_enabled && addons_debug_enabled.has(addon_path));
+	ERR_FAIL_COND(!p_enabled && !addons_debug_enabled.has(addon_path));
+
+	if (!p_enabled) {
+		addons_debug_enabled.erase(addon_path);
+		_update_addon_debug_config();
+		return;
+	}
+
+	if (!DirAccess::exists(addon_path.get_base_dir())) {
+		_remove_plugin_from_debug(addon_path);
+		WARN_PRINT("Addon '" + addon_path + "' failed to load. No directory found. Removing from debug plugins.");
+		return;
+	}
+
+	addons_debug_enabled.insert(addon_path);
+	_update_addon_debug_config();
+}
+
+bool EditorNode::is_addon_debug_enabled(const String &p_addon) const {
+	if (p_addon.begins_with("res://")) {
+		return addons_debug_enabled.has(p_addon);
+	}
+
+	return addons_debug_enabled.has("res://addons/" + p_addon + "/plugin.cfg");
 }
 
 void EditorNode::_remove_edited_scene(bool p_change_tab) {

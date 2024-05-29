@@ -48,6 +48,7 @@ void PluginConfigDialog::_clear_fields() {
 	author_edit->set_text("");
 	version_edit->set_text("");
 	script_edit->set_text("");
+	debug_edit->set_pressed(true);
 }
 
 void PluginConfigDialog::_on_confirmed() {
@@ -310,15 +311,26 @@ PluginConfigDialog::PluginConfigDialog() {
 	script_edit->set_h_size_flags(Control::SIZE_EXPAND_FILL);
 	grid->add_child(script_edit);
 
+	// Debug checkbox
+	Label *debug_label = memnew(Label);
+	debug_label->set_text(TTR("Debug:"));
+	debug_label->set_horizontal_alignment(HORIZONTAL_ALIGNMENT_RIGHT);
+	grid->add_child(debug_label);
+
+	debug_edit = memnew(CheckBox);
+	debug_edit->set_text(TTR("On"));
+	debug_edit->set_tooltip_text(TTR("Enable this to restore GDScript warnings for this plugin.\nIt's recommended to enable it for your own plugins and disable for third-party ones."));
+	debug_edit->set_pressed(true);
+	grid->add_child(debug_edit);
+
 	// Activate now checkbox
-	Label *active_label = memnew(Label);
-	active_label->set_text(TTR("Activate now?"));
-	active_label->set_horizontal_alignment(HORIZONTAL_ALIGNMENT_RIGHT);
-	grid->add_child(active_label);
-	plugin_edit_hidden_controls.push_back(active_label);
+	Control *active_empty = memnew(Control);
+	grid->add_child(active_empty);
+	plugin_edit_hidden_controls.push_back(active_empty);
 
 	active_edit = memnew(CheckBox);
 	active_edit->set_pressed(true);
+	active_edit->set_text(TTR("Activate now?"));
 	grid->add_child(active_edit);
 	plugin_edit_hidden_controls.push_back(active_edit);
 

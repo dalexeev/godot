@@ -88,8 +88,9 @@ void EditorPluginSettings::update_plugins() {
 				String description = cfg->get_value("plugin", "description");
 				String scr = cfg->get_value("plugin", "script");
 
-				bool is_enabled = EditorNode::get_singleton()->is_addon_plugin_enabled(path);
-				Color disabled_color = get_theme_color(SNAME("font_disabled_color"), EditorStringName(Editor));
+				const bool is_enabled = EditorNode::get_singleton()->is_addon_plugin_enabled(path);
+				const bool is_debug = EditorNode::get_singleton()->is_addon_debug_enabled(path);
+				const Color disabled_color = get_theme_color(SNAME("font_disabled_color"), EditorStringName(Editor));
 
 				const PackedInt32Array boundaries = TS->string_get_word_breaks(description, "", 80);
 				String wrapped_description;
@@ -116,6 +117,10 @@ void EditorPluginSettings::update_plugins() {
 				item->set_text(COLUMN_STATUS, TTR("On"));
 				item->set_checked(COLUMN_STATUS, is_enabled);
 				item->set_editable(COLUMN_STATUS, true);
+				item->set_cell_mode(COLUMN_DEBUG, TreeItem::CELL_MODE_CHECK);
+				item->set_text(COLUMN_DEBUG, TTR("On"));
+				item->set_checked(COLUMN_DEBUG, is_debug);
+				item->set_editable(COLUMN_DEBUG, true);
 				item->add_button(COLUMN_EDIT, get_editor_theme_icon(SNAME("Edit")), BUTTON_PLUGIN_EDIT, false, TTR("Edit Plugin"));
 			}
 		}
@@ -124,29 +129,27 @@ void EditorPluginSettings::update_plugins() {
 	updating = false;
 }
 
-void EditorPluginSettings::_plugin_activity_changed() {
-	if (updating) {
-		return;
-	}
-
+void EditorPluginSettings::_plugin_list_item_edited() {
 	TreeItem *ti = plugin_list->get_edited();
 	ERR_FAIL_NULL(ti);
-	bool checked = ti->is_checked(COLUMN_STATUS);
-	String name = ti->get_metadata(COLUMN_NAME);
 
-	EditorNode::get_singleton()->set_addon_plugin_enabled(name, checked, true);
+	const String name = ti->get_metadata(COLUMN_NAME);
 
-	bool is_enabled = EditorNode::get_singleton()->is_addon_plugin_enabled(name);
-
-	if (is_enabled != checked) {
-		updating = true;
-		ti->set_checked(COLUMN_STATUS, is_enabled);
-		updating = false;
+	const bool old_enabled = EditorNode::get_singleton()->is_addon_plugin_enabled(name);
+	const bool new_enabled = ti->is_checked(COLUMN_STATUS);
+	if (old_enabled != new_enabled) {
+		EditorNode::get_singleton()->set_addon_plugin_enabled(name, new_enabled, true);
+		if (new_enabled) {
+			ti->clear_custom_color(COLUMN_NAME);
+		} else {
+			ti->set_custom_color(COLUMN_NAME, get_theme_color(SNAME("font_disabled_color"), EditorStringName(Editor)));
+		}
 	}
-	if (is_enabled) {
-		ti->clear_custom_color(COLUMN_NAME);
-	} else {
-		ti->set_custom_color(COLUMN_NAME, get_theme_color(SNAME("font_disabled_color"), EditorStringName(Editor)));
+
+	const bool old_debug = EditorNode::get_singleton()->is_addon_debug_enabled(name);
+	const bool new_debug = ti->is_checked(COLUMN_DEBUG);
+	if (old_debug != new_debug) {
+		EditorNode::get_singleton()->set_addon_debug_enabled(name, new_debug);
 	}
 }
 
@@ -224,35 +227,40 @@ EditorPluginSettings::EditorPluginSettings() {
 	plugin_list->set_columns(COLUMN_MAX);
 	plugin_list->set_column_titles_visible(true);
 	plugin_list->set_column_title(COLUMN_STATUS, TTR("Enabled"));
+	plugin_list->set_column_title(COLUMN_DEBUG, TTR("Debug"));
 	plugin_list->set_column_title(COLUMN_NAME, TTR("Name"));
 	plugin_list->set_column_title(COLUMN_VERSION, TTR("Version"));
 	plugin_list->set_column_title(COLUMN_AUTHOR, TTR("Author"));
 	plugin_list->set_column_title(COLUMN_EDIT, TTR("Edit"));
 	plugin_list->set_column_title_alignment(COLUMN_STATUS, HORIZONTAL_ALIGNMENT_LEFT);
+	plugin_list->set_column_title_alignment(COLUMN_DEBUG, HORIZONTAL_ALIGNMENT_LEFT);
 	plugin_list->set_column_title_alignment(COLUMN_NAME, HORIZONTAL_ALIGNMENT_LEFT);
 	plugin_list->set_column_title_alignment(COLUMN_VERSION, HORIZONTAL_ALIGNMENT_LEFT);
 	plugin_list->set_column_title_alignment(COLUMN_AUTHOR, HORIZONTAL_ALIGNMENT_LEFT);
 	plugin_list->set_column_title_alignment(COLUMN_EDIT, HORIZONTAL_ALIGNMENT_LEFT);
 	plugin_list->set_column_expand(COLUMN_PADDING_LEFT, false);
 	plugin_list->set_column_expand(COLUMN_STATUS, false);
+	plugin_list->set_column_expand(COLUMN_DEBUG, false);
 	plugin_list->set_column_expand(COLUMN_NAME, true);
 	plugin_list->set_column_expand(COLUMN_VERSION, false);
 	plugin_list->set_column_expand(COLUMN_AUTHOR, false);
 	plugin_list->set_column_expand(COLUMN_EDIT, false);
 	plugin_list->set_column_expand(COLUMN_PADDING_RIGHT, false);
 	plugin_list->set_column_clip_content(COLUMN_STATUS, true);
+	plugin_list->set_column_clip_content(COLUMN_DEBUG, true);
 	plugin_list->set_column_clip_content(COLUMN_NAME, true);
 	plugin_list->set_column_clip_content(COLUMN_VERSION, true);
 	plugin_list->set_column_clip_content(COLUMN_AUTHOR, true);
 	plugin_list->set_column_clip_content(COLUMN_EDIT, true);
 	plugin_list->set_column_custom_minimum_width(COLUMN_PADDING_LEFT, 10 * EDSCALE);
 	plugin_list->set_column_custom_minimum_width(COLUMN_STATUS, 80 * EDSCALE);
+	plugin_list->set_column_custom_minimum_width(COLUMN_DEBUG, 80 * EDSCALE);
 	plugin_list->set_column_custom_minimum_width(COLUMN_VERSION, 100 * EDSCALE);
 	plugin_list->set_column_custom_minimum_width(COLUMN_AUTHOR, 250 * EDSCALE);
 	plugin_list->set_column_custom_minimum_width(COLUMN_EDIT, 40 * EDSCALE);
 	plugin_list->set_column_custom_minimum_width(COLUMN_PADDING_RIGHT, 10 * EDSCALE);
 	plugin_list->set_hide_root(true);
-	plugin_list->connect("item_edited", callable_mp(this, &EditorPluginSettings::_plugin_activity_changed), CONNECT_DEFERRED);
+	plugin_list->connect("item_edited", callable_mp(this, &EditorPluginSettings::_plugin_list_item_edited), CONNECT_DEFERRED);
 
 	VBoxContainer *mc = memnew(VBoxContainer);
 	mc->add_child(plugin_list);

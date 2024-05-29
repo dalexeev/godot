@@ -284,6 +284,7 @@ private:
 	Vector<EditorPlugin *> editor_plugins;
 	bool _initializing_plugins = false;
 	HashMap<String, EditorPlugin *> addon_name_to_plugin;
+	HashSet<String> addons_debug_enabled;
 	LocalVector<String> pending_addons;
 	HashMap<ObjectID, HashSet<EditorPlugin *>> active_plugins;
 	bool is_main_screen_editing = false;
@@ -541,6 +542,7 @@ private:
 	void _update_file_menu_closed();
 
 	void _remove_plugin_from_enabled(const String &p_name);
+	void _remove_plugin_from_debug(const String &p_name);
 	void _plugin_over_edit(EditorPlugin *p_plugin, Object *p_object);
 	void _plugin_over_self_own(EditorPlugin *p_plugin);
 
@@ -635,7 +637,8 @@ private:
 	void _update_layouts_menu();
 	void _layout_menu_option(int p_id);
 
-	void _update_addon_config();
+	void _update_addon_enabled_config();
+	void _update_addon_debug_config();
 
 	void _toggle_distraction_free_mode();
 
@@ -741,6 +744,9 @@ public:
 
 	void set_addon_plugin_enabled(const String &p_addon, bool p_enabled, bool p_config_changed = false);
 	bool is_addon_plugin_enabled(const String &p_addon) const;
+
+	void set_addon_debug_enabled(const String &p_addon, bool p_enabled);
+	bool is_addon_debug_enabled(const String &p_addon) const;
 
 	void edit_node(Node *p_node);
 	void edit_resource(const Ref<Resource> &p_resource);

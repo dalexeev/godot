@@ -46,6 +46,7 @@ class EditorPluginSettings : public VBoxContainer {
 	enum {
 		COLUMN_PADDING_LEFT,
 		COLUMN_STATUS,
+		COLUMN_DEBUG,
 		COLUMN_NAME,
 		COLUMN_VERSION,
 		COLUMN_AUTHOR,
@@ -58,7 +59,7 @@ class EditorPluginSettings : public VBoxContainer {
 	Tree *plugin_list = nullptr;
 	bool updating = false;
 
-	void _plugin_activity_changed();
+	void _plugin_list_item_edited();
 	void _create_clicked();
 	void _cell_button_pressed(Object *p_item, int p_column, int p_id, MouseButton p_button);
 
