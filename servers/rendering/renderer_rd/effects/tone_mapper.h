@@ -65,7 +65,6 @@ private:
 		TONEMAP_FLAG_USE_FXAA = (1 << 4),
 		TONEMAP_FLAG_USE_8_BIT_DEBANDING = (1 << 5),
 		TONEMAP_FLAG_USE_10_BIT_DEBANDING = (1 << 6),
-		TONEMAP_FLAG_CONVERT_TO_SRGB = (1 << 7),
 	};
 
 	struct TonemapPushConstant {
@@ -150,8 +149,6 @@ public:
 		DebandingMode debanding_mode = DEBANDING_MODE_DISABLED;
 		Vector2i texture_size;
 		uint32_t view_count = 1;
-
-		bool convert_to_srgb = false;
 	};
 
 	void tonemapper(RID p_source_color, RID p_dst_framebuffer, const TonemapSettings &p_settings);

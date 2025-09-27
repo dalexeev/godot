@@ -18,7 +18,6 @@ layout(push_constant, std140) uniform Pos {
 	float upscale;
 	float aspect_ratio;
 	uint layer;
-	bool convert_to_srgb;
 	bool use_debanding;
 	float pad;
 }
@@ -59,7 +58,6 @@ layout(push_constant, std140) uniform Pos {
 	float upscale;
 	float aspect_ratio;
 	uint layer;
-	bool convert_to_srgb;
 	bool use_debanding;
 	float pad;
 }
@@ -74,11 +72,6 @@ layout(binding = 0) uniform sampler2DArray src_rt;
 #else
 layout(binding = 0) uniform sampler2D src_rt;
 #endif
-
-vec3 linear_to_srgb(vec3 color) {
-	const vec3 a = vec3(0.055f);
-	return mix((vec3(1.0f) + a) * pow(color.rgb, vec3(1.0f / 2.4f)) - a, 12.92f * color.rgb, lessThan(color.rgb, vec3(0.0031308f)));
-}
 
 // From https://alex.vlachos.com/graphics/Alex_Vlachos_Advanced_VR_Rendering_GDC2015.pdf
 // and https://www.shadertoy.com/view/MslGR8 (5th one starting from the bottom)
@@ -132,20 +125,4 @@ void main() {
 #else
 	color = texture(src_rt, uv);
 #endif
-
-	if (data.convert_to_srgb) {
-		color.rgb = linear_to_srgb(color.rgb); // Regular linear -> SRGB conversion.
-
-		// Even if debanding was applied earlier in the rendering process, it must
-		// be reapplied after the linear_to_srgb floating point operations.
-		// When the linear_to_srgb operation was not performed, the source is
-		// already an 8-bit format and debanding cannot be effective. In this
-		// case, GPU driver rounding error can add noise so debanding should be
-		// skipped entirely.
-		if (data.use_debanding) {
-			color.rgb += screen_space_dither(gl_FragCoord.xy);
-		}
-
-		color.rgb = clamp(color.rgb, vec3(0.0), vec3(1.0));
-	}
 }

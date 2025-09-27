@@ -86,10 +86,6 @@ class RendererCanvasRenderRD : public RendererCanvasRender {
 	};
 
 	enum {
-		CANVAS_FLAGS_CONVERT_ATTRIBUTES_TO_LINEAR = (1 << 0),
-	};
-
-	enum {
 		LIGHT_FLAGS_TEXTURE_MASK = 0xFFFF,
 		LIGHT_FLAGS_BLEND_SHIFT = 16,
 		LIGHT_FLAGS_BLEND_MASK = (3 << 16),
@@ -403,12 +399,11 @@ class RendererCanvasRenderRD : public RendererCanvasRender {
 
 		TextureState() {}
 
-		TextureState(RID p_texture, RS::CanvasItemTextureFilter p_base_filter, RS::CanvasItemTextureRepeat p_base_repeat, bool p_texture_is_data, bool p_use_linear_colors) {
+		TextureState(RID p_texture, RS::CanvasItemTextureFilter p_base_filter, RS::CanvasItemTextureRepeat p_base_repeat, bool p_texture_is_data) {
 			texture = p_texture;
 			other = (((uint32_t)p_base_filter & FILTER_MASK) << FILTER_SHIFT) |
 					(((uint32_t)p_base_repeat & REPEAT_MASK) << REPEAT_SHIFT) |
-					(((uint32_t)p_texture_is_data & TEXTURE_IS_DATA_MASK) << TEXTURE_IS_DATA_SHIFT) |
-					(((uint32_t)p_use_linear_colors & LINEAR_COLORS_MASK) << LINEAR_COLORS_SHIFT);
+					(((uint32_t)p_texture_is_data & TEXTURE_IS_DATA_MASK) << TEXTURE_IS_DATA_SHIFT);
 		}
 
 		_ALWAYS_INLINE_ RS::CanvasItemTextureFilter texture_filter() const {
@@ -614,7 +609,6 @@ class RendererCanvasRenderRD : public RendererCanvasRender {
 	struct RenderTarget {
 		// Current render target for the canvas.
 		RID render_target;
-		bool use_linear_colors = false;
 	};
 
 	inline RID _get_pipeline_specialization_or_ubershader(CanvasShaderData *p_shader_data, PipelineKey &r_pipeline_key, PushConstant &r_push_constant, RID p_mesh_instance = RID(), void *p_surface = nullptr, uint32_t p_surface_index = 0, RID *r_vertex_array = nullptr);

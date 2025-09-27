@@ -533,7 +533,7 @@ void CopyEffects::copy_to_atlas_fb(RID p_source_rd_texture, RID p_dest_framebuff
 	RD::get_singleton()->draw_list_draw(draw_list, true);
 }
 
-void CopyEffects::copy_to_fb_rect(RID p_source_rd_texture, RID p_dest_framebuffer, const Rect2i &p_rect, bool p_flip_y, bool p_force_luminance, bool p_alpha_to_zero, bool p_srgb, RID p_secondary, bool p_multiview, bool p_alpha_to_one, bool p_linear, bool p_normal, const Rect2 &p_src_rect) {
+void CopyEffects::copy_to_fb_rect(RID p_source_rd_texture, RID p_dest_framebuffer, const Rect2i &p_rect, bool p_flip_y, bool p_force_luminance, bool p_alpha_to_zero, RID p_secondary, bool p_multiview, bool p_alpha_to_one, bool p_normal, const Rect2 &p_src_rect) {
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
@@ -551,17 +551,8 @@ void CopyEffects::copy_to_fb_rect(RID p_source_rd_texture, RID p_dest_framebuffe
 	if (p_alpha_to_zero) {
 		copy_to_fb.push_constant.flags |= COPY_TO_FB_FLAG_ALPHA_TO_ZERO;
 	}
-	if (p_srgb) {
-		copy_to_fb.push_constant.flags |= COPY_TO_FB_FLAG_SRGB;
-	}
 	if (p_alpha_to_one) {
 		copy_to_fb.push_constant.flags |= COPY_TO_FB_FLAG_ALPHA_TO_ONE;
-	}
-	if (p_linear) {
-		// Used for copying to a linear buffer. In the mobile renderer we divide the contents of the linear buffer
-		// to allow for a wider effective range.
-		copy_to_fb.push_constant.flags |= COPY_TO_FB_FLAG_LINEAR;
-		copy_to_fb.push_constant.luminance_multiplier = prefer_raster_effects ? 2.0 : 1.0;
 	}
 
 	if (p_normal) {
@@ -605,7 +596,7 @@ void CopyEffects::copy_to_fb_rect(RID p_source_rd_texture, RID p_dest_framebuffe
 	RD::get_singleton()->draw_list_end();
 }
 
-void CopyEffects::copy_to_drawlist(RD::DrawListID p_draw_list, RD::FramebufferFormatID p_fb_format, RID p_source_rd_texture, bool p_linear) {
+void CopyEffects::copy_to_drawlist(RD::DrawListID p_draw_list, RD::FramebufferFormatID p_fb_format, RID p_source_rd_texture) {
 	UniformSetCacheRD *uniform_set_cache = UniformSetCacheRD::get_singleton();
 	ERR_FAIL_NULL(uniform_set_cache);
 	MaterialStorage *material_storage = MaterialStorage::get_singleton();
@@ -613,13 +604,6 @@ void CopyEffects::copy_to_drawlist(RD::DrawListID p_draw_list, RD::FramebufferFo
 
 	memset(&copy_to_fb.push_constant, 0, sizeof(CopyToFbPushConstant));
 	copy_to_fb.push_constant.luminance_multiplier = 1.0;
-
-	if (p_linear) {
-		// Used for copying to a linear buffer. In the mobile renderer we divide the contents of the linear buffer
-		// to allow for a wider effective range.
-		copy_to_fb.push_constant.flags |= COPY_TO_FB_FLAG_LINEAR;
-		copy_to_fb.push_constant.luminance_multiplier = prefer_raster_effects ? 2.0 : 1.0;
-	}
 
 	// setup our uniforms
 	RID default_sampler = material_storage->sampler_rd_get_default(RS::CANVAS_ITEM_TEXTURE_FILTER_LINEAR, RS::CANVAS_ITEM_TEXTURE_REPEAT_DISABLED);

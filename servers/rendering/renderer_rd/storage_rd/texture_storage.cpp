@@ -4026,7 +4026,7 @@ bool TextureStorage::render_target_is_clear_requested(RID p_render_target) {
 Color TextureStorage::render_target_get_clear_request_color(RID p_render_target) {
 	RenderTarget *rt = render_target_owner.get_or_null(p_render_target);
 	ERR_FAIL_NULL_V(rt, Color());
-	return rt->use_hdr ? rt->clear_color.srgb_to_linear() : rt->clear_color;
+	return rt->clear_color;
 }
 
 void TextureStorage::render_target_disable_clear_request(RID p_render_target) {
@@ -4042,7 +4042,7 @@ void TextureStorage::render_target_do_clear_request(RID p_render_target) {
 		return;
 	}
 	Vector<Color> clear_colors;
-	clear_colors.push_back(rt->use_hdr ? rt->clear_color.srgb_to_linear() : rt->clear_color);
+	clear_colors.push_back(rt->clear_color);
 	RD::get_singleton()->draw_list_begin(rt->get_framebuffer(), RD::DRAW_CLEAR_COLOR_0, clear_colors);
 	RD::get_singleton()->draw_list_end();
 	rt->clear_requested = false;
@@ -4365,7 +4365,7 @@ void TextureStorage::render_target_copy_to_back_buffer(RID p_render_target, cons
 		Rect2 src_rect = Rect2(region);
 		src_rect.position /= Size2(rt->size);
 		src_rect.size /= Size2(rt->size);
-		copy_effects->copy_to_fb_rect(rt->color, rt->backbuffer_fb, region, false, false, false, false, RID(), false, true, false, false, src_rect);
+		copy_effects->copy_to_fb_rect(rt->color, rt->backbuffer_fb, region, false, false, false, RID(), false, true, false, src_rect);
 	}
 
 	if (!p_gen_mipmaps) {

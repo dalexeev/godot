@@ -13,7 +13,6 @@
 #define FLAG_USE_SECTION (1 << 1)
 #define FLAG_FORCE_LUMINANCE (1 << 2)
 #define FLAG_ALPHA_TO_ZERO (1 << 3)
-#define FLAG_SRGB (1 << 4)
 #define FLAG_ALPHA_TO_ONE (1 << 5)
 #define FLAG_LINEAR (1 << 6)
 #define FLAG_NORMAL (1 << 7)
@@ -67,7 +66,6 @@ void main() {
 #define FLAG_USE_SECTION (1 << 1)
 #define FLAG_FORCE_LUMINANCE (1 << 2)
 #define FLAG_ALPHA_TO_ZERO (1 << 3)
-#define FLAG_SRGB (1 << 4)
 #define FLAG_ALPHA_TO_ONE (1 << 5)
 #define FLAG_LINEAR (1 << 6)
 #define FLAG_NORMAL (1 << 7)
@@ -104,17 +102,6 @@ layout(set = 1, binding = 0) uniform sampler2D source_color2;
 #endif /* !SET_COLOR */
 
 layout(location = 0) out vec4 frag_color;
-
-vec3 linear_to_srgb(vec3 color) {
-	//if going to srgb, clamp from 0 to 1.
-	color = clamp(color, vec3(0.0), vec3(1.0));
-	const vec3 a = vec3(0.055f);
-	return mix((vec3(1.0f) + a) * pow(color.rgb, vec3(1.0f / 2.4f)) - a, 12.92f * color.rgb, lessThan(color.rgb, vec3(0.0031308f)));
-}
-
-vec3 srgb_to_linear(vec3 color) {
-	return mix(pow((color.rgb + vec3(0.055)) * (1.0 / (1.0 + 0.055)), vec3(2.4)), color.rgb * (1.0 / 12.92), lessThan(color.rgb, vec3(0.04045)));
-}
 
 void main() {
 #ifdef MODE_SET_COLOR
@@ -177,14 +164,8 @@ void main() {
 	if (bool(params.flags & FLAG_ALPHA_TO_ZERO)) {
 		color.rgb *= color.a;
 	}
-	if (bool(params.flags & FLAG_SRGB)) {
-		color.rgb = linear_to_srgb(color.rgb);
-	}
 	if (bool(params.flags & FLAG_ALPHA_TO_ONE)) {
 		color.a = 1.0;
-	}
-	if (bool(params.flags & FLAG_LINEAR)) {
-		color.rgb = srgb_to_linear(color.rgb);
 	}
 	if (bool(params.flags & FLAG_NORMAL)) {
 		color.rgb = normalize(color.rgb * 2.0 - 1.0) * 0.5 + 0.5;

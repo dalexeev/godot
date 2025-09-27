@@ -67,7 +67,6 @@ layout(set = 3, binding = 0) uniform sampler3D source_color_correction;
 #define FLAG_USE_FXAA (1 << 4)
 #define FLAG_USE_8_BIT_DEBANDING (1 << 5)
 #define FLAG_USE_10_BIT_DEBANDING (1 << 6)
-#define FLAG_CONVERT_TO_SRGB (1 << 7)
 
 layout(push_constant, std430) uniform Params {
 	vec3 bcs;
@@ -326,14 +325,6 @@ vec3 tonemap_agx(vec3 color) {
 	// simply return the color, even if it has negative components. These negative
 	// components may be useful for subsequent color adjustments.
 	return color;
-}
-
-vec3 linear_to_srgb(vec3 color) {
-	// Clamping is not strictly necessary for floating point nonlinear sRGB encoding,
-	// but many cases that call this function need the result clamped.
-	color = clamp(color, vec3(0.0), vec3(1.0));
-	const vec3 a = vec3(0.055f);
-	return mix((vec3(1.0f) + a) * pow(color.rgb, vec3(1.0f / 2.4f)) - a, 12.92f * color.rgb, lessThan(color.rgb, vec3(0.0031308f)));
 }
 
 #define TONEMAPPER_LINEAR 0
@@ -877,10 +868,6 @@ void main() {
 
 	color.rgb = apply_tonemapping(color.rgb, params.white);
 
-	bool convert_to_srgb = bool(params.flags & FLAG_CONVERT_TO_SRGB);
-	if (convert_to_srgb) {
-		color.rgb = linear_to_srgb(color.rgb); // Regular linear -> SRGB conversion.
-	}
 #ifndef SUBPASS
 	// Glow
 	if (bool(params.flags & FLAG_USE_GLOW) && params.glow_mode != GLOW_MODE_MIX) {
@@ -891,9 +878,6 @@ void main() {
 
 		// high dynamic range -> SRGB
 		glow = apply_tonemapping(glow, params.white);
-		if (convert_to_srgb) {
-			glow = linear_to_srgb(glow);
-		}
 
 		color.rgb = apply_glow(color.rgb, glow);
 	}
@@ -906,13 +890,7 @@ void main() {
 	}
 
 	if (bool(params.flags & FLAG_USE_COLOR_CORRECTION)) {
-		// apply_color_correction requires nonlinear sRGB encoding
-		if (!convert_to_srgb) {
-			color.rgb = linear_to_srgb(color.rgb);
-		}
 		color.rgb = apply_color_correction(color.rgb);
-		// When convert_to_srgb is false, there is no need to convert back to
-		// linear because the color correction texture sampling does this for us.
 	}
 
 	// Debanding should be done at the end of tonemapping, but before writing to the LDR buffer.

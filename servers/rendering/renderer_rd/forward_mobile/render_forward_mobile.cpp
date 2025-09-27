@@ -1195,9 +1195,7 @@ void RenderForwardMobile::_render_scene(RenderDataRD *p_render_data, const Color
 				WARN_PRINT_ONCE("Canvas background is not supported in multiview!");
 			} else {
 				RID texture = RendererRD::TextureStorage::get_singleton()->render_target_get_rd_texture(rb->get_render_target());
-				bool convert_to_linear = !hdr_render_target;
-
-				copy_effects->copy_to_drawlist(draw_list, fb_format, texture, convert_to_linear);
+				copy_effects->copy_to_drawlist(draw_list, fb_format, texture);
 			}
 		}
 

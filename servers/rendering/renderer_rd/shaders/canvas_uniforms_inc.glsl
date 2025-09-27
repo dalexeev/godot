@@ -90,8 +90,6 @@ bool sc_use_lighting() {
 
 /* SET0: Globals */
 
-#define CANVAS_FLAGS_CONVERT_ATTRIBUTES_TO_LINEAR (1 << 0)
-
 // The values passed per draw primitives are cached within it
 
 layout(set = 0, binding = 1, std140) uniform CanvasData {

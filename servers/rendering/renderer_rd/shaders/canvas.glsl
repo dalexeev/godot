@@ -50,12 +50,6 @@ layout(set = 1, binding = 0, std140) uniform MaterialUniforms {
 
 #GLOBALS
 
-#ifdef USE_ATTRIBUTES
-vec3 srgb_to_linear(vec3 color) {
-	return mix(pow((color.rgb + vec3(0.055)) * (1.0 / (1.0 + 0.055)), vec3(2.4)), color.rgb * (1.0 / 12.92), lessThan(color.rgb, vec3(0.04045)));
-}
-#endif
-
 void main() {
 	vec4 instance_custom = vec4(0.0);
 #if defined(CUSTOM0_USED)
@@ -98,9 +92,6 @@ void main() {
 
 	vec2 vertex = vertex_attrib;
 	vec4 color = color_attrib;
-	if (bool(canvas_data.flags & CANVAS_FLAGS_CONVERT_ATTRIBUTES_TO_LINEAR)) {
-		color.rgb = srgb_to_linear(color.rgb);
-	}
 	color *= draw_data.modulation;
 	vec2 uv = uv_attrib;
 

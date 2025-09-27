@@ -667,8 +667,6 @@ void RendererCanvasRenderRD::canvas_render_items(RID p_to_render_target, Item *p
 		RD::get_singleton()->buffer_update(state.lights_storage_buffer, 0, sizeof(LightUniform) * light_count, &state.light_uniforms[0]);
 	}
 
-	bool use_linear_colors = texture_storage->render_target_is_using_hdr(p_to_render_target);
-
 	{
 		//update canvas state uniform buffer
 		State::Buffer state_buffer;
@@ -688,9 +686,6 @@ void RendererCanvasRenderRD::canvas_render_items(RID p_to_render_target, Item *p
 		_update_transform_2d_to_mat4(normal_transform, state_buffer.canvas_normal_transform);
 
 		Color modulate = p_modulate;
-		if (use_linear_colors) {
-			modulate = p_modulate.srgb_to_linear();
-		}
 		state_buffer.canvas_modulate[0] = modulate.r;
 		state_buffer.canvas_modulate[1] = modulate.g;
 		state_buffer.canvas_modulate[2] = modulate.b;
@@ -725,8 +720,6 @@ void RendererCanvasRenderRD::canvas_render_items(RID p_to_render_target, Item *p
 		state_buffer.tex_to_sdf = 1.0 / ((canvas_scale.x + canvas_scale.y) * 0.5);
 		state_buffer.shadow_pixel_size = 1.0f / (float)(state.shadow_texture_size);
 
-		state_buffer.flags = use_linear_colors ? CANVAS_FLAGS_CONVERT_ATTRIBUTES_TO_LINEAR : 0;
-
 		RD::get_singleton()->buffer_update(state.canvas_state_buffer, 0, sizeof(State::Buffer), &state_buffer);
 	}
 
@@ -757,7 +750,6 @@ void RendererCanvasRenderRD::canvas_render_items(RID p_to_render_target, Item *p
 
 	RenderTarget to_render_target;
 	to_render_target.render_target = p_to_render_target;
-	to_render_target.use_linear_colors = use_linear_colors;
 
 	while (ci) {
 		if (ci->copy_back_buffer && canvas_group_owner == nullptr) {
@@ -2330,7 +2322,6 @@ void RendererCanvasRenderRD::_record_item_commands(const Item *p_item, RenderTar
 	_update_transform_2d_to_mat2x3(base_transform, world);
 
 	Color base_color = p_item->final_modulate;
-	bool use_linear_colors = p_render_target.use_linear_colors;
 	uint32_t base_flags = 0;
 	uint32_t uniforms_ofs = static_cast<uint32_t>(p_item->instance_allocated_shader_uniforms_offset);
 
@@ -2404,9 +2395,6 @@ void RendererCanvasRenderRD::_record_item_commands(const Item *p_item, RenderTar
 				}
 
 				Color modulated = rect->modulate * base_color;
-				if (use_linear_colors) {
-					modulated = modulated.srgb_to_linear();
-				}
 
 				bool has_blend = bool(rect->flags & CANVAS_RECT_LCD);
 				// Start a new batch if the blend mode has changed,
@@ -2420,7 +2408,7 @@ void RendererCanvasRenderRD::_record_item_commands(const Item *p_item, RenderTar
 				}
 
 				bool has_msdf = bool(rect->flags & CANVAS_RECT_MSDF);
-				TextureState tex_state(rect->texture, texture_filter, rect_repeat, has_msdf, use_linear_colors);
+				TextureState tex_state(rect->texture, texture_filter, rect_repeat, has_msdf);
 				TextureInfo *tex_info = texture_info_map.getptr(tex_state);
 				if (!tex_info) {
 					tex_info = &texture_info_map.insert(tex_state, TextureInfo())->value;
@@ -2521,7 +2509,7 @@ void RendererCanvasRenderRD::_record_item_commands(const Item *p_item, RenderTar
 					r_current_batch->flags = 0;
 				}
 
-				TextureState tex_state(np->texture, texture_filter, texture_repeat, false, use_linear_colors);
+				TextureState tex_state(np->texture, texture_filter, texture_repeat, false);
 				TextureInfo *tex_info = texture_info_map.getptr(tex_state);
 				if (!tex_info) {
 					tex_info = &texture_info_map.insert(tex_state, TextureInfo())->value;
@@ -2551,9 +2539,6 @@ void RendererCanvasRenderRD::_record_item_commands(const Item *p_item, RenderTar
 				}
 
 				Color modulated = np->color * base_color;
-				if (use_linear_colors) {
-					modulated = modulated.srgb_to_linear();
-				}
 
 				instance_data->modulation[0] = modulated.r;
 				instance_data->modulation[1] = modulated.g;
@@ -2596,7 +2581,7 @@ void RendererCanvasRenderRD::_record_item_commands(const Item *p_item, RenderTar
 				r_current_batch->command = c;
 				r_current_batch->flags = 0;
 
-				TextureState tex_state(polygon->texture, texture_filter, texture_repeat, false, use_linear_colors);
+				TextureState tex_state(polygon->texture, texture_filter, texture_repeat, false);
 				TextureInfo *tex_info = texture_info_map.getptr(tex_state);
 				if (!tex_info) {
 					tex_info = &texture_info_map.insert(tex_state, TextureInfo())->value;
@@ -2618,9 +2603,6 @@ void RendererCanvasRenderRD::_record_item_commands(const Item *p_item, RenderTar
 				InstanceData *instance_data = new_instance_data(world, lights, base_flags, r_index, uniforms_ofs, tex_info);
 
 				Color color = base_color;
-				if (use_linear_colors) {
-					color = color.srgb_to_linear();
-				}
 
 				instance_data->modulation[0] = color.r;
 				instance_data->modulation[1] = color.g;
@@ -2663,7 +2645,7 @@ void RendererCanvasRenderRD::_record_item_commands(const Item *p_item, RenderTar
 					}
 				}
 
-				TextureState tex_state(primitive->texture, texture_filter, texture_repeat, false, use_linear_colors);
+				TextureState tex_state(primitive->texture, texture_filter, texture_repeat, false);
 				TextureInfo *tex_info = texture_info_map.getptr(tex_state);
 				if (!tex_info) {
 					tex_info = &texture_info_map.insert(tex_state, TextureInfo())->value;
@@ -2683,9 +2665,6 @@ void RendererCanvasRenderRD::_record_item_commands(const Item *p_item, RenderTar
 					instance_data->uvs[j * 2 + 0] = primitive->uvs[j].x;
 					instance_data->uvs[j * 2 + 1] = primitive->uvs[j].y;
 					Color col = primitive->colors[j] * base_color;
-					if (use_linear_colors) {
-						col = col.srgb_to_linear();
-					}
 					instance_data->colors[j * 2 + 0] = (uint32_t(Math::make_half_float(col.g)) << 16) | Math::make_half_float(col.r);
 					instance_data->colors[j * 2 + 1] = (uint32_t(Math::make_half_float(col.a)) << 16) | Math::make_half_float(col.b);
 				}
@@ -2703,9 +2682,6 @@ void RendererCanvasRenderRD::_record_item_commands(const Item *p_item, RenderTar
 						instance_data->uvs[j * 2 + 0] = primitive->uvs[j + offset].x;
 						instance_data->uvs[j * 2 + 1] = primitive->uvs[j + offset].y;
 						Color col = primitive->colors[j + offset] * base_color;
-						if (use_linear_colors) {
-							col = col.srgb_to_linear();
-						}
 						instance_data->colors[j * 2 + 0] = (uint32_t(Math::make_half_float(col.g)) << 16) | Math::make_half_float(col.r);
 						instance_data->colors[j * 2 + 1] = (uint32_t(Math::make_half_float(col.a)) << 16) | Math::make_half_float(col.b);
 					}
@@ -2729,7 +2705,7 @@ void RendererCanvasRenderRD::_record_item_commands(const Item *p_item, RenderTar
 				Color modulate(1, 1, 1, 1);
 				if (c->type == Item::Command::TYPE_MESH) {
 					const Item::CommandMesh *m = static_cast<const Item::CommandMesh *>(c);
-					TextureState tex_state(m->texture, texture_filter, texture_repeat, false, use_linear_colors);
+					TextureState tex_state(m->texture, texture_filter, texture_repeat, false);
 					TextureInfo *tex_info = texture_info_map.getptr(tex_state);
 					if (!tex_info) {
 						tex_info = &texture_info_map.insert(tex_state, TextureInfo())->value;
@@ -2756,7 +2732,7 @@ void RendererCanvasRenderRD::_record_item_commands(const Item *p_item, RenderTar
 						break;
 					}
 
-					TextureState tex_state(mm->texture, texture_filter, texture_repeat, false, use_linear_colors);
+					TextureState tex_state(mm->texture, texture_filter, texture_repeat, false);
 					TextureInfo *tex_info = texture_info_map.getptr(tex_state);
 					if (!tex_info) {
 						tex_info = &texture_info_map.insert(tex_state, TextureInfo())->value;
@@ -2778,7 +2754,7 @@ void RendererCanvasRenderRD::_record_item_commands(const Item *p_item, RenderTar
 					RendererRD::ParticlesStorage *particles_storage = RendererRD::ParticlesStorage::get_singleton();
 
 					const Item::CommandParticles *pt = static_cast<const Item::CommandParticles *>(c);
-					TextureState tex_state(pt->texture, texture_filter, texture_repeat, false, use_linear_colors);
+					TextureState tex_state(pt->texture, texture_filter, texture_repeat, false);
 					TextureInfo *tex_info = texture_info_map.getptr(tex_state);
 					if (!tex_info) {
 						tex_info = &texture_info_map.insert(tex_state, TextureInfo())->value;
@@ -2819,9 +2795,6 @@ void RendererCanvasRenderRD::_record_item_commands(const Item *p_item, RenderTar
 				}
 
 				Color modulated = modulate * base_color;
-				if (use_linear_colors) {
-					modulated = modulated.srgb_to_linear();
-				}
 
 				instance_data->modulation[0] = modulated.r;
 				instance_data->modulation[1] = modulated.g;
@@ -2896,7 +2869,7 @@ void RendererCanvasRenderRD::_record_item_commands(const Item *p_item, RenderTar
 			r_current_batch->has_blend = false;
 		}
 
-		TextureState tex_state(default_canvas_texture, texture_filter, texture_repeat, false, use_linear_colors);
+		TextureState tex_state(default_canvas_texture, texture_filter, texture_repeat, false);
 		TextureInfo *tex_info = texture_info_map.getptr(tex_state);
 		if (!tex_info) {
 			tex_info = &texture_info_map.insert(tex_state, TextureInfo())->value;

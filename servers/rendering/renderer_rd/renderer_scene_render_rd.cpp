@@ -679,7 +679,6 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 		tonemap.use_color_correction = false;
 		tonemap.use_1d_color_correction = false;
 		tonemap.color_correction_texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_3D_WHITE);
-		tonemap.convert_to_srgb = !using_hdr;
 
 		if (can_use_effects && p_render_data->environment.is_valid()) {
 			tonemap.use_bcs = environment_get_adjustments_enabled(p_render_data->environment);
@@ -689,7 +688,7 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 			if (environment_get_adjustments_enabled(p_render_data->environment) && environment_get_color_correction(p_render_data->environment).is_valid()) {
 				tonemap.use_color_correction = true;
 				tonemap.use_1d_color_correction = environment_get_use_1d_color_correction(p_render_data->environment);
-				tonemap.color_correction_texture = texture_storage->texture_get_rd_texture(environment_get_color_correction(p_render_data->environment), !tonemap.convert_to_srgb);
+				tonemap.color_correction_texture = texture_storage->texture_get_rd_texture(environment_get_color_correction(p_render_data->environment), true);
 			}
 		}
 
@@ -714,7 +713,7 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 				// to integer values, but in the case of MetalFX, it may not be worth the performance cost of creating a new
 				// intermediate buffer. In the case of FSR 1.0, the work of adding debanding support hasn't been done yet.
 				// Assume that the DataFormat that will be used by spatial_upscaler is the same as render_target_get_color_format.
-				format_for_debanding = texture_storage->render_target_get_color_format(using_hdr, tonemap.convert_to_srgb);
+				format_for_debanding = texture_storage->render_target_get_color_format(using_hdr, false);
 			}
 		} else {
 			// If we do a bilinear upscale we just render into our render target and our shader will upscale automatically.
@@ -724,12 +723,12 @@ void RendererSceneRenderRD::_render_buffers_post_process_and_tonemap(const Rende
 			if (dest_is_msaa_2d) {
 				dest_fb = FramebufferCacheRD::get_singleton()->get_cache(texture_storage->render_target_get_rd_texture_msaa(render_target));
 				// Assume that the DataFormat of render_target_get_rd_texture_msaa is the same as render_target_get_color_format.
-				format_for_debanding = texture_storage->render_target_get_color_format(using_hdr, tonemap.convert_to_srgb);
+				format_for_debanding = texture_storage->render_target_get_color_format(using_hdr, false);
 				texture_storage->render_target_set_msaa_needs_resolve(render_target, true); // Make sure this gets resolved.
 			} else {
 				dest_fb = texture_storage->render_target_get_rd_framebuffer(render_target);
 				// Assume that the DataFormat of render_target_get_rd_framebuffer is the same as render_target_get_color_format.
-				format_for_debanding = texture_storage->render_target_get_color_format(using_hdr, tonemap.convert_to_srgb);
+				format_for_debanding = texture_storage->render_target_get_color_format(using_hdr, false);
 			}
 		}
 
@@ -919,7 +918,6 @@ void RendererSceneRenderRD::_post_process_subpass(RID p_source_texture, RID p_fr
 	tonemap.use_color_correction = false;
 	tonemap.use_1d_color_correction = false;
 	tonemap.color_correction_texture = texture_storage->texture_rd_get_default(RendererRD::TextureStorage::DEFAULT_RD_TEXTURE_3D_WHITE);
-	tonemap.convert_to_srgb = !using_hdr;
 
 	if (can_use_effects && p_render_data->environment.is_valid()) {
 		tonemap.use_bcs = environment_get_adjustments_enabled(p_render_data->environment);
@@ -929,7 +927,7 @@ void RendererSceneRenderRD::_post_process_subpass(RID p_source_texture, RID p_fr
 		if (environment_get_adjustments_enabled(p_render_data->environment) && environment_get_color_correction(p_render_data->environment).is_valid()) {
 			tonemap.use_color_correction = true;
 			tonemap.use_1d_color_correction = environment_get_use_1d_color_correction(p_render_data->environment);
-			tonemap.color_correction_texture = texture_storage->texture_get_rd_texture(environment_get_color_correction(p_render_data->environment), !tonemap.convert_to_srgb);
+			tonemap.color_correction_texture = texture_storage->texture_get_rd_texture(environment_get_color_correction(p_render_data->environment), true);
 		}
 	}
 
@@ -940,7 +938,7 @@ void RendererSceneRenderRD::_post_process_subpass(RID p_source_texture, RID p_fr
 
 	if (rb->get_use_debanding()) {
 		// Assume that the DataFormat of p_framebuffer is the same as render_target_get_color_format.
-		RD::DataFormat dest_fb_format = texture_storage->render_target_get_color_format(using_hdr, tonemap.convert_to_srgb);
+		RD::DataFormat dest_fb_format = texture_storage->render_target_get_color_format(using_hdr, false);
 		if (dest_fb_format >= RD::DATA_FORMAT_R8_UNORM && dest_fb_format <= RD::DATA_FORMAT_A8B8G8R8_SRGB_PACK32) {
 			tonemap.debanding_mode = RendererRD::ToneMapper::TonemapSettings::DebandingMode::DEBANDING_MODE_8_BIT;
 		} else if (dest_fb_format >= RD::DATA_FORMAT_A2R10G10B10_UNORM_PACK32 && dest_fb_format <= RD::DATA_FORMAT_A2B10G10R10_SINT_PACK32) {
@@ -1091,7 +1089,7 @@ void RendererSceneRenderRD::_render_buffers_debug_draw(const RenderDataRD *p_ren
 
 	if (debug_draw == RS::VIEWPORT_DEBUG_DRAW_NORMAL_BUFFER && _render_buffers_get_normal_texture(rb).is_valid()) {
 		Size2 rtsize = texture_storage->render_target_get_size(render_target);
-		copy_effects->copy_to_fb_rect(_render_buffers_get_normal_texture(rb), texture_storage->render_target_get_rd_framebuffer(render_target), Rect2(Vector2(), rtsize), false, false, false, false, RID(), false, false, false, true);
+		copy_effects->copy_to_fb_rect(_render_buffers_get_normal_texture(rb), texture_storage->render_target_get_rd_framebuffer(render_target), Rect2(Vector2(), rtsize), false, false, false, RID(), false, false, true);
 	}
 
 	if (debug_draw == RS::VIEWPORT_DEBUG_DRAW_OCCLUDERS) {
