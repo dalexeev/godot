@@ -538,6 +538,96 @@
 			Specifies the maximum number of log files allowed (used for rotation). Set to [code]1[/code] to disable log file rotation.
 			If the [code]--log-file &lt;file&gt;[/code] [url=$DOCS_URL/tutorials/editor/command_line_tutorial.html]command line argument[/url] is used, log rotation is always disabled.
 		</member>
+		<member name="debug/gdscript3/warnings/assert_always_false" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/assert_always_true" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/confusable_capture_reassignment" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/confusable_identifier" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/confusable_local_declaration" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/confusable_local_usage" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/deprecated_keyword" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/directory_rules" type="Dictionary" setter="" getter="" default="{ &quot;res://addons&quot;: 0 }">
+		</member>
+		<member name="debug/gdscript3/warnings/empty_file" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/enable" type="bool" setter="" getter="" default="true">
+		</member>
+		<member name="debug/gdscript3/warnings/enum_variable_without_default" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/get_node_default_without_onready" type="int" setter="" getter="" default="2">
+		</member>
+		<member name="debug/gdscript3/warnings/incompatible_ternary" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/inference_on_variant" type="int" setter="" getter="" default="2">
+		</member>
+		<member name="debug/gdscript3/warnings/inferred_declaration" type="int" setter="" getter="" default="0">
+		</member>
+		<member name="debug/gdscript3/warnings/int_as_enum_without_cast" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/int_as_enum_without_match" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/integer_division" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/missing_await" type="int" setter="" getter="" default="0">
+		</member>
+		<member name="debug/gdscript3/warnings/missing_tool" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/narrowing_conversion" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/native_method_override" type="int" setter="" getter="" default="2">
+		</member>
+		<member name="debug/gdscript3/warnings/onready_with_export" type="int" setter="" getter="" default="2">
+		</member>
+		<member name="debug/gdscript3/warnings/redundant_await" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/return_value_discarded" type="int" setter="" getter="" default="0">
+		</member>
+		<member name="debug/gdscript3/warnings/shadowed_global_identifier" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/shadowed_variable" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/shadowed_variable_base_class" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/standalone_expression" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/standalone_ternary" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/static_called_on_instance" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/unassigned_variable" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/unassigned_variable_op_assign" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/unreachable_code" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/unreachable_pattern" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/unsafe_call_argument" type="int" setter="" getter="" default="0">
+		</member>
+		<member name="debug/gdscript3/warnings/unsafe_method_access" type="int" setter="" getter="" default="0">
+		</member>
+		<member name="debug/gdscript3/warnings/unsafe_property_access" type="int" setter="" getter="" default="0">
+		</member>
+		<member name="debug/gdscript3/warnings/unsafe_void_return" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/untyped_declaration" type="int" setter="" getter="" default="0">
+		</member>
+		<member name="debug/gdscript3/warnings/unused_local_constant" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/unused_parameter" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/unused_private_class_variable" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/unused_signal" type="int" setter="" getter="" default="1">
+		</member>
+		<member name="debug/gdscript3/warnings/unused_variable" type="int" setter="" getter="" default="1">
+		</member>
 		<member name="debug/gdscript/warnings/assert_always_false" type="int" setter="" getter="" default="1">
 			When set to [b]Warn[/b] or [b]Error[/b], produces a warning or an error respectively when an [code]assert[/code] call always evaluates to [code]false[/code].
 		</member>
