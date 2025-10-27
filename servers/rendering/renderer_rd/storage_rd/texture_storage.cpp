@@ -3568,11 +3568,11 @@ void TextureStorage::_update_render_target(RenderTarget *rt) {
 	rt->color_format = render_target_get_color_format(rt->use_hdr, false);
 	rt->color_format_srgb = render_target_get_color_format(rt->use_hdr, true);
 
-	if (rt->use_hdr) {
+//	if (rt->use_hdr) {
 		rt->image_format = rt->is_transparent ? Image::FORMAT_RGBAH : Image::FORMAT_RGBH;
-	} else {
-		rt->image_format = rt->is_transparent ? Image::FORMAT_RGBA8 : Image::FORMAT_RGB8;
-	}
+//	} else {
+//		rt->image_format = rt->is_transparent ? Image::FORMAT_RGBA8 : Image::FORMAT_RGB8;
+//	}
 
 	RD::TextureFormat rd_color_attachment_format;
 	RD::TextureView rd_view;
@@ -3654,7 +3654,8 @@ void TextureStorage::_update_render_target(RenderTarget *rt) {
 		tex->rd_format = rt->color_format;
 		tex->rd_format_srgb = rt->color_format_srgb;
 		tex->format = rt->image_format;
-		tex->validated_format = rt->use_hdr ? Image::FORMAT_RGBAH : Image::FORMAT_RGBA8;
+		//tex->validated_format = rt->use_hdr ? Image::FORMAT_RGBAH : Image::FORMAT_RGBA8;
+		tex->validated_format = Image::FORMAT_RGBAH;
 
 		Vector<RID> proxies = tex->proxies; //make a copy, since update may change it
 		for (int i = 0; i < proxies.size(); i++) {
@@ -4367,7 +4368,8 @@ void TextureStorage::render_target_copy_to_back_buffer(RID p_render_target, cons
 	// TODO figure out stereo support here
 
 	if (RendererSceneRenderRD::get_singleton()->_render_buffers_can_be_storage()) {
-		copy_effects->copy_to_rect(rt->color, rt->backbuffer_mipmap0, region, false, false, false, !rt->use_hdr, true);
+		//copy_effects->copy_to_rect(rt->color, rt->backbuffer_mipmap0, region, false, false, false, !rt->use_hdr, true);
+		copy_effects->copy_to_rect(rt->color, rt->backbuffer_mipmap0, region, false, false, false, false, true);
 	} else {
 		Rect2 src_rect = Rect2(region);
 		src_rect.position /= Size2(rt->size);
@@ -4392,7 +4394,8 @@ void TextureStorage::render_target_copy_to_back_buffer(RID p_render_target, cons
 
 		RID mipmap = rt->backbuffer_mipmaps[i];
 		if (RendererSceneRenderRD::get_singleton()->_render_buffers_can_be_storage()) {
-			copy_effects->gaussian_blur(prev_texture, mipmap, region, texture_size, !rt->use_hdr);
+			//copy_effects->gaussian_blur(prev_texture, mipmap, region, texture_size, !rt->use_hdr);
+			copy_effects->gaussian_blur(prev_texture, mipmap, region, texture_size, false);
 		} else {
 			copy_effects->gaussian_blur_raster(prev_texture, mipmap, region, texture_size);
 		}
@@ -4424,7 +4427,8 @@ void TextureStorage::render_target_clear_back_buffer(RID p_render_target, const 
 
 	// Single texture copy for backbuffer.
 	if (RendererSceneRenderRD::get_singleton()->_render_buffers_can_be_storage()) {
-		copy_effects->set_color(rt->backbuffer_mipmap0, p_color, region, !rt->use_hdr);
+		//copy_effects->set_color(rt->backbuffer_mipmap0, p_color, region, !rt->use_hdr);
+		copy_effects->set_color(rt->backbuffer_mipmap0, p_color, region, false);
 	} else {
 		copy_effects->set_color_raster(rt->backbuffer_mipmap0, p_color, region);
 	}
@@ -4464,7 +4468,8 @@ void TextureStorage::render_target_gen_back_buffer_mipmaps(RID p_render_target, 
 		RID mipmap = rt->backbuffer_mipmaps[i];
 
 		if (RendererSceneRenderRD::get_singleton()->_render_buffers_can_be_storage()) {
-			copy_effects->gaussian_blur(prev_texture, mipmap, region, texture_size, !rt->use_hdr);
+			//copy_effects->gaussian_blur(prev_texture, mipmap, region, texture_size, !rt->use_hdr);
+			copy_effects->gaussian_blur(prev_texture, mipmap, region, texture_size, false);
 		} else {
 			copy_effects->gaussian_blur_raster(prev_texture, mipmap, region, texture_size);
 		}
@@ -4539,11 +4544,11 @@ RID TextureStorage::render_target_get_vrs_texture(RID p_render_target) const {
 }
 
 RD::DataFormat TextureStorage::render_target_get_color_format(bool p_use_hdr, bool p_srgb) {
-	if (p_use_hdr) {
+//	if (p_use_hdr) {
 		return RD::DATA_FORMAT_R16G16B16A16_SFLOAT;
-	} else {
-		return p_srgb ? RD::DATA_FORMAT_R8G8B8A8_SRGB : RD::DATA_FORMAT_R8G8B8A8_UNORM;
-	}
+//	} else {
+//		return p_srgb ? RD::DATA_FORMAT_R8G8B8A8_SRGB : RD::DATA_FORMAT_R8G8B8A8_UNORM;
+//	}
 }
 
 uint32_t TextureStorage::render_target_get_color_usage_bits(bool p_msaa) {
