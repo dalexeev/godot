@@ -611,7 +611,7 @@ public:
 
 	struct RootNode : public Node {
 		ClassNode *main_class = nullptr;
-		HashMap<int, Comment> comments;
+		//LocalVector<Pair<SourceRegion, bool>> comments; // TODO
 		bool is_tool = false;
 
 		RootNode() { type = Type::ROOT; }
@@ -806,16 +806,24 @@ private:
 	void abstract_annotation(AnnotationNode *p_annotation, Node *p_target);
 	void static_annotation(AnnotationNode *p_annotation, Node *p_target);
 	void onready_annotation(AnnotationNode *p_annotation, Node *p_target);
-	template <PropertyHint t_hint, Variant::Type t_type>
-	void export_annotation(AnnotationNode *p_annotation, Node *p_target);
+	void export_annotation(AnnotationNode *p_annotation, Node *p_target, PropertyHint p_hint, Variant::Type p_type);
 	void export_storage_annotation(AnnotationNode *p_annotation, Node *p_target);
 	void export_custom_annotation(AnnotationNode *p_annotation, Node *p_target);
 	void export_tool_button_annotation(AnnotationNode *p_annotation, Node *p_target);
-	template <PropertyUsageFlags t_usage>
-	void export_group_annotation(AnnotationNode *p_annotation, Node *p_target);
+	void export_group_annotation(AnnotationNode *p_annotation, Node *p_target, PropertyUsageFlags p_usage);
 	void warning_ignore_annotation(AnnotationNode *p_annotation, Node *p_target);
 	void warning_ignore_region_annotation(AnnotationNode *p_annotation, Node *p_target);
 	void rpc_annotation(AnnotationNode *p_annotation, Node *p_target);
+
+	template <PropertyHint t_hint, Variant::Type t_type>
+	void export_annotation(AnnotationNode *p_annotation, Node *p_target) {
+		export_annotation(p_annotation, p_target, t_hint, t_type);
+	}
+
+	template <PropertyUsageFlags t_usage>
+	void export_group_annotation(AnnotationNode *p_annotation, Node *p_target) {
+		export_group_annotation(p_annotation, p_target, t_usage);
+	}
 
 public:
 	_FORCE_INLINE_ static bool annotation_exists(const StringName &p_name) {

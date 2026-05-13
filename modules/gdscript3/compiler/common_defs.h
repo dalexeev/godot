@@ -61,13 +61,6 @@ struct SourceRegion {
 			end(p_end) {}
 };
 
-struct Comment {
-	bool is_inline = false;
-	SourceRegion source_region;
-
-	Comment() {}
-};
-
 enum class Trilean : uint8_t {
 	FALSE,
 	UNKNOWN,

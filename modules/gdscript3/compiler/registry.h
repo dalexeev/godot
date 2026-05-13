@@ -66,7 +66,7 @@ class Registry {
 	void _add_dependency(const String &p_from_path, const String &p_to_path);
 	void _remove_dependency(const String &p_from_path, const String &p_to_path);
 
-	template <bool t_is_cached>
+	template <bool t_parse_body>
 	void _parse_script(const String &p_path);
 
 	template <bool t_allow_cached>

@@ -191,6 +191,10 @@ TEST_CASE("[Modules][GDScript3][Compiler][DataType] Type relations") {
 	CHECK_RELATIONS( packed_string_array_type,  packed_float32_array_type, FALSE, FALSE,   FALSE   );
 	CHECK_RELATIONS( packed_string_array_type,  packed_string_array_type,  TRUE,  TRUE,    TRUE    );
 
+	// --- Enums ---
+
+	// TODO
+
 	// --- Classes ---
 
 	CHECK_RELATIONS( unknown_type,   object_type,   UNKNOWN, UNKNOWN, UNKNOWN );
@@ -314,6 +318,10 @@ TEST_CASE("[Modules][GDScript3][Compiler][DataType] Union type construction") {
 	CHECK_UNION( LIST( array_float_type, array_type       ), "Array"                   );
 	CHECK_UNION( LIST( array_float_type, array_int_type   ), "Array[float]|Array[int]" );
 	CHECK_UNION( LIST( array_float_type, array_float_type ), "Array[float]"            );
+
+	// --- Enums ---
+
+	// TODO
 
 	// --- Classes ---
 

@@ -85,22 +85,21 @@ void Registry::_remove_dependency(const String &p_from_path, const String &p_to_
 }
 
 // This method expects the passed path to be valid.
-template <bool t_is_cached>
+template <bool t_parse_body>
 void Registry::_parse_script(const String &p_path) {
 	const Ref<FileAccess> file = FileAccess::open(p_path, FileAccess::READ);
 	ERR_FAIL_COND_MSG(file.is_null(), vformat(R"(Failed to open file "%s".)", p_path));
 
 	Parser parser(p_path, file->get_as_text(), tab_size);
-	parser.parse();
+	parser.parse(t_parse_body);
 
-	if constexpr (t_is_cached) {
+	if constexpr (t_parse_body) {
 		ERR_FAIL_COND_MSG(!scripts.has(p_path), "GDScript bug: Cache mismatch detected.");
+		scripts[p_path].ast = parser.get_ast();
 	} else {
 		ERR_FAIL_COND_MSG(scripts.has(p_path), "GDScript bug: Cache mismatch detected.");
 		scripts[p_path] = ScriptInfo();
 	}
-
-	scripts[p_path].ast = parser.get_ast();
 
 	StringName fqtn;
 	{
@@ -112,7 +111,7 @@ void Registry::_parse_script(const String &p_path) {
 		// TODO: Check for a conflict with native classes and other extensions?
 	}
 
-	if constexpr (t_is_cached) {
+	if constexpr (t_parse_body) {
 		ERR_FAIL_COND_MSG(fqtn != scripts[p_path].fqtn, "GDScript bug: Cache mismatch detected.");
 	} else {
 		// An error about a duplicate global name will be generated in the analyzer.

@@ -106,11 +106,11 @@ const Parser::ParseRule *Parser::get_rule(Token::Type p_token_type) {
 		{ nullptr,                  nullptr,                  PREC::NONE           }, // BREAKPOINT
 		{ nullptr,                  nullptr,                  PREC::NONE           }, // CLASS
 		{ nullptr,                  nullptr,                  PREC::NONE           }, // CLASS_NAME
-		{ nullptr,                  nullptr,                  PREC::NONE           }, // CONST_
+		{ nullptr,                  nullptr,                  PREC::NONE           }, // TK_CONST
 		{ nullptr,                  nullptr,                  PREC::NONE           }, // ENUM
 		{ nullptr,                  nullptr,                  PREC::NONE           }, // EXTENDS
 		{ FN(lambda),               nullptr,                  PREC::NONE           }, // FUNC
-		{ nullptr,                  FN(binary_operator),      PREC::CONTENT_TEST   }, // IN_
+		{ nullptr,                  FN(binary_operator),      PREC::CONTENT_TEST   }, // TK_IN
 		{ nullptr,                  FN(type_test),            PREC::TYPE_TEST      }, // IS
 		{ nullptr,                  nullptr,                  PREC::NONE           }, // NAMESPACE
 		{ FN(self),                 nullptr,                  PREC::NONE           }, // SELF
@@ -137,7 +137,9 @@ const Parser::ParseRule *Parser::get_rule(Token::Type p_token_type) {
 		{ nullptr,                  nullptr,                  PREC::NONE           }, // FORWARD_ARROW
 		{ nullptr,                  nullptr,                  PREC::NONE           }, // UNDERSCORE
 		// --- Whitespace ---
+		{ nullptr,                  nullptr,                  PREC::NONE           }, // COMMENT
 		{ nullptr,                  nullptr,                  PREC::NONE           }, // NEWLINE
+		{ nullptr,                  nullptr,                  PREC::NONE           }, // INDENTATION
 		{ nullptr,                  nullptr,                  PREC::NONE           }, // INDENT
 		{ nullptr,                  nullptr,                  PREC::NONE           }, // DEDENT
 		// --- Error message improvement ---
@@ -146,7 +148,7 @@ const Parser::ParseRule *Parser::get_rule(Token::Type p_token_type) {
 		{ nullptr,                  FN(question_mark),        PREC::CAST           }, // QUESTION_MARK
 		// --- Special ---
 		{ nullptr,                  nullptr,                  PREC::NONE           }, // ERROR
-		{ nullptr,                  nullptr,                  PREC::NONE           }, // EOF_
+		{ nullptr,                  nullptr,                  PREC::NONE           }, // TK_EOF
 	};
 	// clang-format on
 
@@ -161,110 +163,86 @@ const Parser::ParseRule *Parser::get_rule(Token::Type p_token_type) {
 	return &rules[(int)p_token_type];
 }
 
+#define HANDLE_TOKEN(m_token, m_operation) \
+	case Token::Type::m_token: \
+		return Operation::m_operation
+
 AST::AssignmentNode::Operation Parser::get_assignment_operation(Token::Type p_token_type) {
+	// clang-format off
 	switch (p_token_type) {
 		using Operation = AST::AssignmentNode::Operation;
 
-		case Token::Type::EQUAL:
-			return Operation::NONE;
-		case Token::Type::PLUS_EQUAL:
-			return Operation::ADDITION;
-		case Token::Type::MINUS_EQUAL:
-			return Operation::SUBTRACTION;
-		case Token::Type::STAR_EQUAL:
-			return Operation::MULTIPLICATION;
-		case Token::Type::SLASH_EQUAL:
-			return Operation::DIVISION;
-		case Token::Type::PERCENT_EQUAL:
-			return Operation::MODULO;
-		case Token::Type::STAR_STAR_EQUAL:
-			return Operation::POWER;
-		case Token::Type::LESS_LESS_EQUAL:
-			return Operation::BIT_SHIFT_LEFT;
-		case Token::Type::GREATER_GREATER_EQUAL:
-			return Operation::BIT_SHIFT_RIGHT;
-		case Token::Type::AMPERSAND_EQUAL:
-			return Operation::BIT_AND;
-		case Token::Type::PIPE_EQUAL:
-			return Operation::BIT_OR;
-		case Token::Type::CARET_EQUAL:
-			return Operation::BIT_XOR;
+		HANDLE_TOKEN( EQUAL,                 NONE            );
+		HANDLE_TOKEN( PLUS_EQUAL,            ADDITION        );
+		HANDLE_TOKEN( MINUS_EQUAL,           SUBTRACTION     );
+		HANDLE_TOKEN( STAR_EQUAL,            MULTIPLICATION  );
+		HANDLE_TOKEN( SLASH_EQUAL,           DIVISION        );
+		HANDLE_TOKEN( PERCENT_EQUAL,         MODULO          );
+		HANDLE_TOKEN( STAR_STAR_EQUAL,       POWER           );
+		HANDLE_TOKEN( LESS_LESS_EQUAL,       BIT_SHIFT_LEFT  );
+		HANDLE_TOKEN( GREATER_GREATER_EQUAL, BIT_SHIFT_RIGHT );
+		HANDLE_TOKEN( AMPERSAND_EQUAL,       BIT_AND         );
+		HANDLE_TOKEN( PIPE_EQUAL,            BIT_OR          );
+		HANDLE_TOKEN( CARET_EQUAL,           BIT_XOR         );
 
 		default:
 			ERR_FAIL_V_MSG(Operation::NONE, "GDScript bug: Invalid assignment token.");
 	}
+	// clang-format on
 }
 
 AST::BinaryOperatorNode::Operation Parser::get_binary_operation(Token::Type p_token_type) {
+	// clang-format off
 	switch (p_token_type) {
 		using Operation = AST::BinaryOperatorNode::Operation;
 
-		case Token::Type::PLUS:
-			return Operation::ADDITION;
-		case Token::Type::MINUS:
-			return Operation::SUBTRACTION;
-		case Token::Type::STAR:
-			return Operation::MULTIPLICATION;
-		case Token::Type::SLASH:
-			return Operation::DIVISION;
-		case Token::Type::PERCENT:
-			return Operation::MODULO;
-		case Token::Type::STAR_STAR:
-			return Operation::POWER;
-		case Token::Type::LESS_LESS:
-			return Operation::BIT_LEFT_SHIFT;
-		case Token::Type::GREATER_GREATER:
-			return Operation::BIT_RIGHT_SHIFT;
-		case Token::Type::AMPERSAND:
-			return Operation::BIT_AND;
-		case Token::Type::PIPE:
-			return Operation::BIT_OR;
-		case Token::Type::CARET:
-			return Operation::BIT_XOR;
-		case Token::Type::AND:
-		case Token::Type::AMPERSAND_AMPERSAND:
-			return Operation::LOGIC_AND;
-		case Token::Type::OR:
-		case Token::Type::PIPE_PIPE:
-			return Operation::LOGIC_OR;
-		case Token::Type::IN_:
-			return Operation::CONTENT_TEST;
-		case Token::Type::EQUAL_EQUAL:
-			return Operation::COMP_EQUAL;
-		case Token::Type::BANG_EQUAL:
-			return Operation::COMP_NOT_EQUAL;
-		case Token::Type::LESS:
-			return Operation::COMP_LESS;
-		case Token::Type::LESS_EQUAL:
-			return Operation::COMP_LESS_EQUAL;
-		case Token::Type::GREATER:
-			return Operation::COMP_GREATER;
-		case Token::Type::GREATER_EQUAL:
-			return Operation::COMP_GREATER_EQUAL;
+		HANDLE_TOKEN( PLUS,                ADDITION           );
+		HANDLE_TOKEN( MINUS,               SUBTRACTION        );
+		HANDLE_TOKEN( STAR,                MULTIPLICATION     );
+		HANDLE_TOKEN( SLASH,               DIVISION           );
+		HANDLE_TOKEN( PERCENT,             MODULO             );
+		HANDLE_TOKEN( STAR_STAR,           POWER              );
+		HANDLE_TOKEN( LESS_LESS,           BIT_LEFT_SHIFT     );
+		HANDLE_TOKEN( GREATER_GREATER,     BIT_RIGHT_SHIFT    );
+		HANDLE_TOKEN( AMPERSAND,           BIT_AND            );
+		HANDLE_TOKEN( PIPE,                BIT_OR             );
+		HANDLE_TOKEN( CARET,               BIT_XOR            );
+		HANDLE_TOKEN( AND,                 LOGIC_AND          );
+		HANDLE_TOKEN( AMPERSAND_AMPERSAND, LOGIC_AND          );
+		HANDLE_TOKEN( OR,                  LOGIC_OR           );
+		HANDLE_TOKEN( PIPE_PIPE,           LOGIC_OR           );
+		HANDLE_TOKEN( TK_IN,               CONTENT_TEST       );
+		HANDLE_TOKEN( EQUAL_EQUAL,         COMP_EQUAL         );
+		HANDLE_TOKEN( BANG_EQUAL,          COMP_NOT_EQUAL     );
+		HANDLE_TOKEN( LESS,                COMP_LESS          );
+		HANDLE_TOKEN( LESS_EQUAL,          COMP_LESS_EQUAL    );
+		HANDLE_TOKEN( GREATER,             COMP_GREATER       );
+		HANDLE_TOKEN( GREATER_EQUAL,       COMP_GREATER_EQUAL );
 
 		default:
 			ERR_FAIL_V_MSG(Operation::ADDITION, "GDScript bug: Invalid binary operator token.");
 	}
+	// clang-format on
 }
 
 AST::UnaryOperatorNode::Operation Parser::get_unary_operation(Token::Type p_token_type) {
+	// clang-format off
 	switch (p_token_type) {
 		using Operation = AST::UnaryOperatorNode::Operation;
 
-		case Token::Type::PLUS:
-			return Operation::POSITIVE;
-		case Token::Type::MINUS:
-			return Operation::NEGATIVE;
-		case Token::Type::TILDE:
-			return Operation::COMPLEMENT;
-		case Token::Type::NOT:
-		case Token::Type::BANG:
-			return Operation::LOGIC_NOT;
+		HANDLE_TOKEN( PLUS,  POSITIVE   );
+		HANDLE_TOKEN( MINUS, NEGATIVE   );
+		HANDLE_TOKEN( TILDE, COMPLEMENT );
+		HANDLE_TOKEN( NOT,   LOGIC_NOT  );
+		HANDLE_TOKEN( BANG,  LOGIC_NOT  );
 
 		default:
 			ERR_FAIL_V_MSG(Operation::POSITIVE, "GDScript bug: Invalid unary operator token.");
 	}
+	// clang-format on
 }
+
+#undef HANDLE_TOKEN
 
 // ----- Utilities -----
 
@@ -316,11 +294,14 @@ void Parser::push_error(AST::Node *p_origin, const String &p_message, bool p_pan
 		push_error(p_message, p_panic);
 		return;
 	}
+
+#ifdef DEV_ENABLED
 	if (unlikely(node_stack.has(p_origin))) {
 		ERR_PRINT("GDScript bug: Trying to push error on a node with incomplete extents.");
 		push_error(p_message, p_panic);
 		return;
 	}
+#endif // DEV_ENABLED
 
 	push_error(p_origin->source_region, p_message, p_panic);
 }
@@ -329,16 +310,51 @@ void Parser::push_warning(const SourceRegion &p_origin, WarningDB::Code p_code, 
 	ast.get_diagnostic_list().push_warning(p_origin, p_code, p_symbols);
 }
 
+Tokenizer::Token Parser::_scan() {
+	Token token;
+
+	bool found = false;
+	while (!found) {
+		token = tokenizer.scan();
+
+		switch (token.type) {
+			case Token::Type::COMMENT:
+				// Nothing to do.
+				break;
+			case Token::Type::NEWLINE:
+				if (multiline_mode) {
+					// TODO
+				}
+				break;
+			case Token::Type::INDENTATION:
+				if (multiline_mode) {
+					// TODO
+				}
+				break;
+			case Token::Type::ERROR:
+				push_error(token.source_region, token.data);
+				break;
+			default:
+				found = true;
+				break;
+		}
+
+		for (const Token::InnerError &inner_error : token.inner_errors) {
+			push_error(inner_error.source_region, inner_error.message, false);
+		}
+	}
+
+	return token;
+}
+
 // This method allows you to look ahead one token to decide what the **current** token is. In most cases this method
 // is not required; you usually decide what the current token is as soon as you encounter it, depending on the context.
 // The GDScript grammar and parser are intended to be simple, so looking ahead more than one token is not provided.
-// NOTE: Be careful when using this method in combination with multiline mode switching, as the tokenizer may
-// or may not produce whitespace tokens (`NEWLINE`, `INDENT`, and `DEDENT`) depending on the multiline mode.
+// NOTE: Be careful when using this method in combination with multiline mode switching, since whitespace tokens
+// may be ignored depending on the multiline mode.
 bool Parser::check_next(Token::Type p_token_type) {
 	if (next_token.type == Token::Type::EMPTY) {
-		const Tokenizer::State current_state = tokenizer.get_state();
-		next_token = tokenizer.scan();
-		tokenizer.set_state(current_state);
+		next_token = _scan();
 	}
 
 	return next_token.type == p_token_type;
@@ -349,46 +365,16 @@ void Parser::advance() {
 
 	lambda_ended = false; // Empty marker since we're past the end in any case.
 
-	previous_state = tokenizer.get_state();
-
-	previous_token = current_token;
-
 	if (current_token.type != Token::Type::DEDENT) {
 		previous_token_end = current_token.source_region.end;
 	}
 
-	for (const PendingError &error : pending_errors) {
-		push_error(error.source_region, error.message, error.panic);
-	}
-	pending_errors.clear();
-
-	current_token = tokenizer.scan();
-
-	if (next_token.type != Token::Type::EMPTY) {
+	if (next_token.type == Token::Type::EMPTY) {
+		current_token = _scan();
+	} else {
+		current_token = next_token;
 		next_token = Token();
 	}
-
-	while (current_token.type == Token::Type::ERROR) {
-		const String message = current_token.data;
-		if (message.begins_with("soft:")) {
-			pending_errors.push_back({ current_token.source_region, message.trim_prefix("soft:"), false });
-		} else {
-			pending_errors.push_back({ current_token.source_region, message, true });
-		}
-		current_token = tokenizer.scan();
-	}
-
-	for (const Token::InnerError &inner_error : current_token.inner_errors) {
-		pending_errors.push_back({ inner_error.source_region, inner_error.message, false });
-	}
-}
-
-// This method allows you to rescan the current token. Useful when switching the multiline mode.
-void Parser::readvance() {
-	tokenizer.set_state(previous_state);
-	pending_errors.clear();
-	current_token = previous_token;
-	advance();
 }
 
 bool Parser::match(Token::Type p_token_type) {
@@ -412,16 +398,17 @@ void Parser::synchronize_statement() {
 			return;
 		}
 
-		if (current_token.is_inline) {
+		// TODO
+		/*if (current_token.is_inline) {
 			advance(); // Consume current token.
 			continue;
-		}
+		}*/
 
 		switch (current_token.type) {
 			case Token::Type::USING:
 			case Token::Type::CLASS:
 			case Token::Type::ENUM:
-			case Token::Type::CONST_:
+			case Token::Type::TK_CONST:
 			case Token::Type::VAR:
 			case Token::Type::FUNC:
 			case Token::Type::SIGNAL:
@@ -499,7 +486,7 @@ void Parser::synchronize(const LocalVector<Token::Type> &p_token_types) {
 			case Token::Type::WHEN:
 			case Token::Type::AS:
 			case Token::Type::AWAIT:
-			case Token::Type::IN_:
+			case Token::Type::TK_IN:
 			case Token::Type::IS:
 			case Token::Type::SELF:
 			case Token::Type::SUPER:
@@ -528,7 +515,7 @@ void Parser::synchronize(const LocalVector<Token::Type> &p_token_types) {
 			case Token::Type::BREAKPOINT:
 			case Token::Type::CLASS:
 			case Token::Type::CLASS_NAME:
-			case Token::Type::CONST_:
+			case Token::Type::TK_CONST:
 			case Token::Type::ENUM:
 			case Token::Type::EXTENDS:
 			case Token::Type::FUNC:
@@ -554,9 +541,11 @@ void Parser::synchronize(const LocalVector<Token::Type> &p_token_types) {
 			case Token::Type::VCS_CONFLICT_MARKER:
 				return; // Failed to recover.
 			case Token::Type::EMPTY:
-			case Token::Type::EOF_:
+			case Token::Type::COMMENT:
+			case Token::Type::INDENTATION:
+			case Token::Type::TK_EOF:
 			case Token::Type::MAX:
-				return; // Unreachable.
+				ERR_FAIL_MSG("GDScript bug: Unexpected token type.");
 		}
 	}
 }
@@ -583,7 +572,7 @@ void Parser::expect(
 
 		int index = 0;
 		for (Token::Type token_type : p_token_types) {
-			expected_symbols.write[index] = Token::get_symbol_name(token_type);
+			expected_symbols.write[index] = Token::get_name_static(token_type);
 			index++;
 		}
 
@@ -595,7 +584,7 @@ void Parser::expect(
 				"Expected %s after %s, found %s instead.",
 				get_alternative_list(expected_symbols),
 				p_context,
-				current_token.get_debug_name()));
+				current_token.get_name()));
 	}
 
 	synchronize(p_token_types);
@@ -614,16 +603,17 @@ void Parser::end_statement(const String &p_context) {
 			advance(); // Consume newline or semicolon.
 		}
 	}
-	if (!found && tokenizer.get_expression_indented_block_depth() > 0) {
+	// TODO
+	/*if (!found && get_expression_indented_block_depth() > 0) {
 		// Mark the lambda as done since we found something else to end the statement.
 		lambda_ended = true;
 		found = true;
-	}
+	}*/
 	if (!found && !is_at_end()) {
 		push_error(vformat(
 				"Expected end of statement after %s, found %s instead.",
 				p_context,
-				current_token.get_debug_name()));
+				current_token.get_name()));
 	}
 }
 
@@ -679,30 +669,31 @@ void Parser::pop_container(AST::Node *p_node) {
 	ERR_FAIL_COND_MSG(p_node != last_node, "GDScript bug: Mismatch in container node stack.");
 }
 
-void Parser::push_multiline(bool p_state) {
-	multiline_stack.push_back(p_state);
-	tokenizer.set_multiline_mode(p_state);
+void Parser::push_multiline_mode(bool p_mode) {
+	multiline_mode_stack.push_back(p_mode);
+	multiline_mode = p_mode;
 }
 
-void Parser::pop_multiline(Token::Type p_token_type, const String &p_context) {
-	ERR_FAIL_COND_MSG(multiline_stack.is_empty(), "GDScript bug: Trying to pop from empty multiline stack.");
+void Parser::pop_multiline_mode(Token::Type p_token_type, const String &p_context) {
+	ERR_FAIL_COND_MSG(multiline_mode_stack.is_empty(), "GDScript bug: Trying to pop from empty multiline mode stack.");
 
-	multiline_stack.resize(multiline_stack.size() - 1);
-	tokenizer.set_multiline_mode(is_multiline_mode());
+	multiline_mode_stack.resize(multiline_mode_stack.size() - 1);
+	multiline_mode = multiline_mode_stack.is_empty() ? false : multiline_mode_stack[multiline_mode_stack.size() - 1];
 
 	if (p_token_type != Token::Type::MAX && !match(p_token_type)) {
 		const String msg = vformat(R"*(Expected "%s" after %s.)*", Token::get_name_static(p_token_type), p_context);
 		push_error(get_previous_token_end_region(), msg);
 
-		if (!is_multiline_mode()) {
+		// TODO
+		/*if (!multiline_mode) {
 			readvance();
-		}
+		}*/
 	}
 }
 
 // ----- Main  -----
 
-void Parser::parse_script() {
+void Parser::parse_script(bool p_parse_body) {
 	ERR_FAIL_COND(ast.get_root() != nullptr);
 
 	AST::RootNode *root = ast.alloc_node<AST::RootNode>();
@@ -790,13 +781,14 @@ void Parser::parse_script() {
 				parse_extends();
 				end_statement("superclass");
 				break;
-			case Token::Type::EOF_:
+			case Token::Type::TK_EOF:
 				push_applicable_annotations(main_class, pending_annotations);
 				can_have_class_name_or_extends = false;
 				break;
 			case Token::Type::INDENT:
 				push_error("Unexpected indent in class body.", false);
 				advance(); // Consume extra indent.
+				break;
 			case Token::Type::DEDENT:
 				advance(); // Consume extra dedent.
 				break;
@@ -820,6 +812,11 @@ void Parser::parse_script() {
 		synchronize_statement();
 	}
 
+	if (!p_parse_body) {
+		//push_applicable_annotations(main_class, pending_annotations); // TODO
+		return;
+	}
+
 	push_container(main_class, true);
 	parse_class_body();
 	pop_container(main_class);
@@ -833,14 +830,9 @@ void Parser::parse_script() {
 
 	pop_node(root);
 
-	for (const PendingError &error : pending_errors) {
-		push_error(error.source_region, error.message, error.panic);
-	}
-	pending_errors.clear();
-
 	push_applicable_annotations(main_class, pending_annotations);
 	ast.close_warning_regions(current_token.source_region.end);
-	root->comments = tokenizer.get_comments();
+	//root->comments = tokenizer.get_comments(); // TODO
 
 	if (!is_at_end()) {
 		ERR_PRINT("GDScript bug: Expected end of file.");
@@ -851,8 +843,8 @@ void Parser::parse_script() {
 	if (!container_stack.is_empty()) {
 		ERR_PRINT("GDScript bug: Imbalanced container node stack.");
 	}
-	if (!multiline_stack.is_empty()) {
-		ERR_PRINT("GDScript bug: Imbalanced multiline stack.");
+	if (!multiline_mode_stack.is_empty()) {
+		ERR_PRINT("GDScript bug: Imbalanced multiline mode stack.");
 	}
 }
 
@@ -901,7 +893,7 @@ void Parser::parse_class_body() {
 			case Token::Type::ENUM:
 				member = Parser::parse_enum();
 				break;
-			case Token::Type::CONST_:
+			case Token::Type::TK_CONST:
 				member = Parser::parse_constant();
 				break;
 			case Token::Type::VAR:
@@ -932,7 +924,7 @@ void Parser::parse_class_body() {
 					advance(); // Consume extra dedent.
 				}
 				break;
-			case Token::Type::EOF_:
+			case Token::Type::TK_EOF:
 				body_ended = true;
 				break;
 			case Token::Type::LITERAL:
@@ -1004,7 +996,7 @@ void Parser::parse_class_body() {
 						push_error(source_region, msg, panic);
 					}
 				} else {
-					push_error(vformat("Unexpected %s in class body.", current_token.get_debug_name()));
+					push_error(vformat("Unexpected %s in class body.", current_token.get_name()));
 					advance(); // Consume unexpected token.
 				}
 				break;
@@ -1093,7 +1085,7 @@ AST::BlockNode *Parser::parse_block(const String &p_context) {
 			case Token::Type::USING:
 				statement = parse_type_alias();
 				break;
-			case Token::Type::CONST_:
+			case Token::Type::TK_CONST:
 				statement = parse_constant();
 				break;
 			case Token::Type::VAR:
@@ -1145,19 +1137,20 @@ AST::BlockNode *Parser::parse_block(const String &p_context) {
 					advance(); // Consume extra dedent.
 				}
 				break;
-			case Token::Type::EOF_:
+			case Token::Type::TK_EOF:
 				body_ended = true;
 				break;
 			default:
 				AST::ExpressionNode *expression = parse_expression_or_null();
 				if (expression == nullptr) {
-					if (tokenizer.get_expression_indented_block_depth() > 0) {
+					// TODO
+					/*if (get_expression_indented_block_depth() > 0) {
 						// If it's not a valid expression beginning, it might be the continuation
 						// of the outer expression where this lambda is.
 						body_ended = true;
 						break;
-					}
-					push_error(vformat("Expected statement, found %s instead.", current_token.get_debug_name()));
+					}*/
+					push_error(vformat("Expected statement, found %s instead.", current_token.get_name()));
 					advance(); // Consume unexpected token.
 				} else {
 					if (expression->is_recovery) {
@@ -1198,9 +1191,10 @@ AST::BlockNode *Parser::parse_block(const String &p_context) {
 	}
 
 	if (is_multiline) {
-		if (!match(Token::Type::DEDENT) && !is_at_end() && tokenizer.get_expression_indented_block_depth() <= 0) {
+		// TODO
+		/*if (!match(Token::Type::DEDENT) && !is_at_end() && get_expression_indented_block_depth() <= 0) {
 			push_error(vformat("Missing unindent at the end of %s block.", p_context));
-		}
+		}*/
 	} // TODO: else if previous SEMICOLON require NEWLINE...
 
 	return block;
@@ -1220,7 +1214,7 @@ AST::AnnotationNode *Parser::parse_annotation() {
 	advance(); // Consume annotation token.
 
 	if (check(Token::Type::PARENTHESIS_OPEN)) {
-		push_multiline(true);
+		push_multiline_mode(true);
 		advance(); // Consume `(`.
 
 		do { // Allow trailing comma.
@@ -1239,7 +1233,7 @@ AST::AnnotationNode *Parser::parse_annotation() {
 			expect({ Token::Type::COMMA, Token::Type::PARENTHESIS_CLOSE }, "annotation argument");
 		} while (match(Token::Type::COMMA));
 
-		pop_multiline(Token::Type::PARENTHESIS_CLOSE, "annotation arguments");
+		pop_multiline_mode(Token::Type::PARENTHESIS_CLOSE, "annotation arguments");
 	}
 
 	pop_node(annotation);
@@ -1561,7 +1555,7 @@ AST::EnumNode *Parser::parse_enum() {
 	}
 
 	if (check(Token::Type::BRACE_OPEN)) {
-		push_multiline(true);
+		push_multiline_mode(true);
 		advance(); // Consume `{`.
 
 		do { // Allow trailing comma.
@@ -1592,7 +1586,7 @@ AST::EnumNode *Parser::parse_enum() {
 			expect({ Token::Type::COMMA, Token::Type::BRACE_CLOSE }, "enum element");
 		} while (match(Token::Type::COMMA));
 
-		pop_multiline(Token::Type::BRACE_CLOSE, "enum body");
+		pop_multiline_mode(Token::Type::BRACE_CLOSE, "enum body");
 	}
 
 	pop_node(enum_node);
@@ -1602,7 +1596,7 @@ AST::EnumNode *Parser::parse_enum() {
 }
 
 AST::ConstantNode *Parser::parse_constant() {
-	DEV_ASSERT(check(Token::Type::CONST_));
+	DEV_ASSERT(check(Token::Type::TK_CONST));
 
 	AST::ConstantNode *constant = ast.alloc_node<AST::ConstantNode>();
 
@@ -1950,7 +1944,7 @@ AST::FunctionNode *Parser::parse_function(FunctionType p_function_type) {
 	}
 
 	if (check(Token::Type::PARENTHESIS_OPEN)) {
-		push_multiline(true);
+		push_multiline_mode(true);
 		advance(); // Consume `(`.
 
 		bool first_pass = true;
@@ -1966,7 +1960,7 @@ AST::FunctionNode *Parser::parse_function(FunctionType p_function_type) {
 						R"*(Expected %s parameter or ")" after "%s", found %s instead.)*",
 						type_name,
 						first_pass ? "(" : ",",
-						current_token.get_debug_name()));
+						current_token.get_name()));
 			} else {
 				if (function->rest_used) {
 					push_error(parameter, "Cannot have parameters after the rest parameter.", false);
@@ -2010,7 +2004,7 @@ AST::FunctionNode *Parser::parse_function(FunctionType p_function_type) {
 			expect({ Token::Type::COMMA, Token::Type::PARENTHESIS_CLOSE }, vformat("%s parameter", type_name));
 		} while (match(Token::Type::COMMA));
 
-		pop_multiline(Token::Type::PARENTHESIS_CLOSE, vformat("%s parameters", type_name));
+		pop_multiline_mode(Token::Type::PARENTHESIS_CLOSE, vformat("%s parameters", type_name));
 	}
 
 	if (match(Token::Type::FORWARD_ARROW)) {
@@ -2062,7 +2056,7 @@ AST::SignalNode *Parser::parse_signal() {
 	expect({ Token::Type::PARENTHESIS_OPEN }, "signal name", true);
 
 	if (check(Token::Type::PARENTHESIS_OPEN)) {
-		push_multiline(true);
+		push_multiline_mode(true);
 		advance(); // Consume `(`.
 
 		bool first_pass = true;
@@ -2076,7 +2070,7 @@ AST::SignalNode *Parser::parse_signal() {
 				push_error(vformat(
 						R"*(Expected signal parameter or ")" after "%s", found %s instead.)*",
 						first_pass ? "(" : ",",
-						current_token.get_debug_name()));
+						current_token.get_name()));
 			} else {
 				if (parameter->is_rest) {
 					push_error(parameter, "A signal parameter cannot be a rest parameter.", false);
@@ -2093,7 +2087,7 @@ AST::SignalNode *Parser::parse_signal() {
 			expect({ Token::Type::COMMA, Token::Type::PARENTHESIS_CLOSE }, "signal parameter");
 		} while (match(Token::Type::COMMA));
 
-		pop_multiline(Token::Type::PARENTHESIS_CLOSE, "signal parameters");
+		pop_multiline_mode(Token::Type::PARENTHESIS_CLOSE, "signal parameters");
 	}
 
 	pop_node(signal);
@@ -2111,7 +2105,7 @@ AST::IfNode *Parser::parse_if() {
 
 	push_node(if_node);
 
-	const String token_name = current_token.get_name();
+	const String token_name = current_token.get_raw_name();
 
 	advance(); // Consume `if` or `elif`.
 
@@ -2172,10 +2166,11 @@ AST::MatchNode *Parser::parse_match() {
 		push_error(R"(Expected inline block because parent "match" is also inline.)");
 	}
 	if (is_multiline) {
-		if (!match(Token::Type::INDENT)) {
+		// TODO
+		/*if (!match(Token::Type::INDENT)) {
 			push_error(R"(Expected indented block after "match" header.)");
 			return match_node;
-		}
+		}*/
 	} else {
 		if (!has_colon) {
 			return match_node;
@@ -2224,7 +2219,7 @@ AST::MatchNode *Parser::parse_match() {
 					advance(); // Consume extra dedent.
 				}
 				break;
-			case Token::Type::EOF_:
+			case Token::Type::TK_EOF:
 				body_ended = true;
 				break;
 			default:
@@ -2257,9 +2252,10 @@ AST::MatchNode *Parser::parse_match() {
 	}
 
 	if (is_multiline) {
-		if (!match(Token::Type::DEDENT) && !is_at_end() && tokenizer.get_expression_indented_block_depth() <= 0) {
+		// TODO
+		/*if (!match(Token::Type::DEDENT) && !is_at_end() && get_expression_indented_block_depth() <= 0) {
 			push_error(R"(Missing unindent at the end of "match" block.)");
-		}
+		}*/
 	} // TODO: else if previous SEMICOLON require NEWLINE...
 
 	return match_node;
@@ -2319,7 +2315,7 @@ AST::MatchPatternNode *Parser::parse_match_pattern() {
 		case Token::Type::BRACKET_OPEN:
 			pattern->pattern_type = PatternType::ARRAY;
 
-			push_multiline(true);
+			push_multiline_mode(true);
 			advance(); // Consume `[`.
 
 			do { // Allow trailing comma.
@@ -2348,13 +2344,13 @@ AST::MatchPatternNode *Parser::parse_match_pattern() {
 				expect({ Token::Type::COMMA, Token::Type::BRACKET_CLOSE }, "array pattern element");
 			} while (match(Token::Type::COMMA));
 
-			pop_multiline(Token::Type::BRACKET_CLOSE, "array pattern elements");
+			pop_multiline_mode(Token::Type::BRACKET_CLOSE, "array pattern elements");
 
 			break;
 		case Token::Type::BRACE_OPEN:
 			pattern->pattern_type = PatternType::DICTIONARY;
 
-			push_multiline(true);
+			push_multiline_mode(true);
 			advance(); // Consume `{`.
 
 			do { // Allow trailing comma.
@@ -2404,7 +2400,7 @@ AST::MatchPatternNode *Parser::parse_match_pattern() {
 				expect({ Token::Type::COMMA, Token::Type::BRACE_CLOSE }, "dictionary pattern element");
 			} while (match(Token::Type::COMMA));
 
-			pop_multiline(Token::Type::BRACE_CLOSE, "dictionary pattern elements");
+			pop_multiline_mode(Token::Type::BRACE_CLOSE, "dictionary pattern elements");
 
 			break;
 		case Token::Type::UNDERSCORE:
@@ -2450,11 +2446,11 @@ AST::ForNode *Parser::parse_for() {
 	}
 
 	if (for_node->iterator_type == nullptr) {
-		if (!match(Token::Type::IN_)) {
+		if (!match(Token::Type::TK_IN)) {
 			push_error(R"(Expected "in" or ":" after iterator variable name.)");
 		}
 	} else {
-		if (!match(Token::Type::IN_)) {
+		if (!match(Token::Type::TK_IN)) {
 			push_error(R"(Expected "in" after iterator variable type specifier.)");
 		}
 	}
@@ -2570,7 +2566,7 @@ AST::AssertNode *Parser::parse_assert() {
 		return assert;
 	}
 
-	push_multiline(true);
+	push_multiline_mode(true);
 	advance(); // Consume `(`.
 
 	assert->condition = parse_expression();
@@ -2592,7 +2588,7 @@ AST::AssertNode *Parser::parse_assert() {
 		match(Token::Type::COMMA);
 	}
 
-	pop_multiline(Token::Type::PARENTHESIS_CLOSE, "assert arguments");
+	pop_multiline_mode(Token::Type::PARENTHESIS_CLOSE, "assert arguments");
 
 	pop_node(assert);
 	end_statement(R"("assert")");
@@ -2668,7 +2664,7 @@ AST::ExpressionNode *Parser::_parse_array() {
 
 	push_node(array);
 
-	push_multiline(true);
+	push_multiline_mode(true);
 	advance(); // Consume `[`.
 
 	do { // Allow trailing comma.
@@ -2687,7 +2683,7 @@ AST::ExpressionNode *Parser::_parse_array() {
 		expect({ Token::Type::COMMA, Token::Type::BRACKET_CLOSE }, "array element");
 	} while (match(Token::Type::COMMA));
 
-	pop_multiline(Token::Type::BRACKET_CLOSE, "array elements");
+	pop_multiline_mode(Token::Type::BRACKET_CLOSE, "array elements");
 
 	pop_node(array);
 
@@ -2723,7 +2719,7 @@ AST::ExpressionNode *Parser::_parse_dictionary() {
 
 	push_node(dictionary);
 
-	push_multiline(true);
+	push_multiline_mode(true);
 	advance(); // Consume `{`.
 
 	// TODO: For Lua style, keys are `StringName`s, not `String`s.
@@ -2808,7 +2804,7 @@ AST::ExpressionNode *Parser::_parse_dictionary() {
 		expect({ Token::Type::COMMA, Token::Type::BRACE_CLOSE }, "dictionary element");
 	} while (match(Token::Type::COMMA));
 
-	pop_multiline(Token::Type::BRACE_CLOSE, "dictionary elements");
+	pop_multiline_mode(Token::Type::BRACE_CLOSE, "dictionary elements");
 
 	pop_node(dictionary);
 
@@ -2888,7 +2884,7 @@ AST::ExpressionNode *Parser::_parse_get_node() {
 AST::ExpressionNode *Parser::_parse_grouping() {
 	DEV_ASSERT(check(Token::Type::PARENTHESIS_OPEN));
 
-	push_multiline(true);
+	push_multiline_mode(true);
 	advance(); // Consume `(`.
 
 	AST::ExpressionNode *grouped = parse_expression();
@@ -2896,7 +2892,7 @@ AST::ExpressionNode *Parser::_parse_grouping() {
 		push_error(grouped, "Expected grouping expression.");
 	}
 
-	pop_multiline(Token::Type::PARENTHESIS_CLOSE, "grouping expression");
+	pop_multiline_mode(Token::Type::PARENTHESIS_CLOSE, "grouping expression");
 
 	return grouped;
 }
@@ -2959,20 +2955,20 @@ AST::ExpressionNode *Parser::_parse_lambda() {
 
 	push_node(lambda);
 
-	const bool multiline_mode = is_multiline_mode();
+	const bool was_multiline_mode = multiline_mode;
 
-	if (multiline_mode) {
-		push_multiline(false);
-		tokenizer.push_expression_indented_block();
+	if (was_multiline_mode) {
+		push_multiline_mode(false);
+		//push_expression_indented_block(); // TODO
 	}
 
 	lambda->function = parse_function(FunctionType::LAMBDA);
 	lambda->function->parent_node = lambda;
 
-	if (multiline_mode) {
-		tokenizer.pop_expression_indented_block();
-		pop_multiline();
-		readvance(); // Discard spurious whitespace tokens.
+	if (was_multiline_mode) {
+		//pop_expression_indented_block(); // TODO
+		pop_multiline_mode();
+		//readvance(); // Discard spurious whitespace tokens. // TODO
 	}
 
 	pop_node(lambda);
@@ -3030,7 +3026,7 @@ AST::ExpressionNode *Parser::_parse_super() {
 AST::ExpressionNode *Parser::_parse_unary_operator() {
 	using Operation = AST::UnaryOperatorNode::Operation;
 
-	const String operator_name = current_token.get_name();
+	const String operator_name = current_token.get_raw_name();
 	const Operation operation = get_unary_operation(current_token.type);
 
 	Precedence next_precedence = Precedence::SIGN;
@@ -3076,7 +3072,7 @@ AST::ExpressionNode *Parser::_parse_yield() {
 }
 
 AST::ExpressionNode *Parser::_parse_assignment(AST::ExpressionNode *p_previous_operand) {
-	const String operator_name = current_token.get_name();
+	const String operator_name = current_token.get_raw_name();
 
 	AST::AssignmentNode *assignment = ast.alloc_node<AST::AssignmentNode>();
 	assignment->operation = get_assignment_operation(current_token.type);
@@ -3135,7 +3131,7 @@ AST::ExpressionNode *Parser::_parse_attribute(AST::ExpressionNode *p_previous_op
 }
 
 AST::ExpressionNode *Parser::_parse_binary_operator(AST::ExpressionNode *p_previous_operand) {
-	const String operator_name = current_token.get_name();
+	const String operator_name = current_token.get_raw_name();
 	const Precedence next_precedence = get_higher_precedence(get_rule(current_token.type)->precedence);
 
 	AST::BinaryOperatorNode *binary_operator = ast.alloc_node<AST::BinaryOperatorNode>();
@@ -3177,7 +3173,7 @@ AST::ExpressionNode *Parser::_parse_call(AST::ExpressionNode *p_previous_operand
 		push_error(call->callee, R"(Expected expression before "(".)");
 	}
 
-	push_multiline(true);
+	push_multiline_mode(true);
 	advance(); // Consume `(`.
 
 	do { // Allow trailing comma.
@@ -3196,7 +3192,7 @@ AST::ExpressionNode *Parser::_parse_call(AST::ExpressionNode *p_previous_operand
 		expect({ Token::Type::COMMA, Token::Type::PARENTHESIS_CLOSE }, "call argument");
 	} while (match(Token::Type::COMMA));
 
-	pop_multiline(Token::Type::PARENTHESIS_CLOSE, "call arguments");
+	pop_multiline_mode(Token::Type::PARENTHESIS_CLOSE, "call arguments");
 
 	pop_node(call);
 
@@ -3236,7 +3232,7 @@ AST::ExpressionNode *Parser::_parse_not_in_operator(AST::ExpressionNode *p_previ
 
 	advance(); // Consume `not`.
 
-	if (match(Token::Type::IN_)) {
+	if (match(Token::Type::TK_IN)) {
 		operator_source_region.end = previous_token_end;
 	} else {
 		push_error(R"(Expected "in" after "not" in content test operator.)");
@@ -3296,7 +3292,7 @@ AST::ExpressionNode *Parser::_parse_subscript(AST::ExpressionNode *p_previous_op
 		push_error(subscript->base, R"(Expected expression before "[".)");
 	}
 
-	push_multiline(true);
+	push_multiline_mode(true);
 	advance(); // Consume `[`.
 
 	subscript->index = parse_expression();
@@ -3305,7 +3301,7 @@ AST::ExpressionNode *Parser::_parse_subscript(AST::ExpressionNode *p_previous_op
 		push_error(subscript->index, R"(Expected expression after "[".)");
 	}
 
-	pop_multiline(Token::Type::BRACKET_CLOSE, "subscription index");
+	pop_multiline_mode(Token::Type::BRACKET_CLOSE, "subscription index");
 
 	pop_node(subscript);
 
@@ -3402,8 +3398,7 @@ AST::ExpressionNode *Parser::_parse_type_test(AST::ExpressionNode *p_previous_op
 
 Parser::Parser(const String &p_script_path, const String &p_source, int p_tab_size) {
 	tokenizer = Tokenizer(p_source, p_tab_size);
-	previous_state = tokenizer.get_state();
-	current_token = tokenizer.scan();
+	current_token = _scan();
 
 	ast = AST(p_script_path, p_source);
 }

@@ -971,8 +971,7 @@ void AST::onready_annotation(AnnotationNode *p_annotation, Node *p_target) {
 	// TODO
 }
 
-template <PropertyHint t_hint, Variant::Type t_type>
-void AST::export_annotation(AnnotationNode *p_annotation, Node *p_target) {
+void AST::export_annotation(AnnotationNode *p_annotation, Node *p_target, PropertyHint p_hint, Variant::Type p_type) {
 	// TODO
 }
 
@@ -988,8 +987,7 @@ void AST::export_tool_button_annotation(AnnotationNode *p_annotation, Node *p_ta
 	// TODO
 }
 
-template <PropertyUsageFlags t_usage>
-void AST::export_group_annotation(AnnotationNode *p_annotation, Node *p_target) {
+void AST::export_group_annotation(AnnotationNode *p_annotation, Node *p_target, PropertyUsageFlags p_usage) {
 	// TODO
 }
 

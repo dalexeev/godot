@@ -100,10 +100,7 @@ class Parser {
 	};
 
 	Tokenizer tokenizer;
-	Tokenizer::State previous_state;
-	Token previous_token; // Only for `readvance()`!
-	SourcePosition previous_token_end; // Except `DEDENT`.
-	LocalVector<PendingError> pending_errors;
+	SourcePosition previous_token_end; // Except `DEDENT`. // TODO
 	Token current_token;
 	Token next_token;
 	bool lambda_ended = false;
@@ -114,7 +111,9 @@ class Parser {
 
 	LocalVector<AST::Node *> node_stack;
 	LocalVector<Pair<AST::Node *, bool>> container_stack;
-	LocalVector<bool> multiline_stack;
+
+	LocalVector<bool> multiline_mode_stack;
+	bool multiline_mode = false;
 
 	List<AST::AnnotationNode *> pending_annotations;
 
@@ -156,16 +155,17 @@ class Parser {
 	}
 
 	_FORCE_INLINE_ bool is_at_end() const {
-		return current_token.type == Token::Type::EOF_;
+		return current_token.type == Token::Type::TK_EOF;
 	}
 	_FORCE_INLINE_ bool check(Token::Type p_token_type) const {
 		return current_token.type == p_token_type;
 	}
 
+	Token _scan();
+
 	bool check_next(Token::Type p_token_type);
 
 	void advance();
-	void readvance();
 
 	bool match(Token::Type p_token_type);
 
@@ -191,16 +191,13 @@ class Parser {
 		return container_stack.is_empty() ? true : container_stack[container_stack.size() - 1].second;
 	}
 
-	void push_multiline(bool p_state);
-	void pop_multiline(Token::Type p_token_type, const String &p_context);
-	_FORCE_INLINE_ void pop_multiline() { pop_multiline(Token::Type::MAX, String()); }
-	_FORCE_INLINE_ bool is_multiline_mode() const {
-		return multiline_stack.is_empty() ? false : multiline_stack[multiline_stack.size() - 1];
-	}
+	void push_multiline_mode(bool p_mode);
+	void pop_multiline_mode(Token::Type p_token_type, const String &p_context);
+	_FORCE_INLINE_ void pop_multiline_mode() { pop_multiline_mode(Token::Type::MAX, String()); }
 
 	// ----- Main -----
 
-	void parse_script();
+	void parse_script(bool p_parse_body);
 	void parse_class_body();
 	AST::BlockNode *parse_block(const String &p_context);
 
@@ -274,9 +271,7 @@ class Parser {
 	AST::ExpressionNode *_parse_type_test(AST::ExpressionNode *p_previous_operand);
 
 public:
-	//static AST parse_header(const String &p_script_path, const String &p_source); // TODO
-
-	_FORCE_INLINE_ void parse() { parse_script(); }
+	_FORCE_INLINE_ void parse(bool p_parse_body = true) { parse_script(p_parse_body); }
 	_FORCE_INLINE_ const AST &get_ast() const { return ast; }
 
 	Parser(const String &p_script_path, const String &p_source, int p_tab_size = DEFAULT_TAB_SIZE);

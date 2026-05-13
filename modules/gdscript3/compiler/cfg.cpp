@@ -42,7 +42,7 @@ uint32_t CFG::SymbolTable::add_global(const StringName &p_name, const DataType &
 		index = data->global_indices[p_name];
 	} else {
 		index = data->globals.size();
-		data->globals.push_back(Symbol{ p_name, p_datatype });
+		data->globals.push_back(Symbol(p_name, p_datatype));
 		data->global_indices[p_name] = index;
 	}
 
@@ -57,7 +57,7 @@ uint32_t CFG::SymbolTable::add_static_variable(const StringName &p_name, const D
 		index = data->static_variable_indices[p_name];
 	} else {
 		index = data->static_variables.size();
-		data->static_variables.push_back(Symbol{ p_name, p_datatype });
+		data->static_variables.push_back(Symbol(p_name, p_datatype));
 		data->static_variable_indices[p_name] = index;
 	}
 
@@ -72,7 +72,7 @@ uint32_t CFG::SymbolTable::add_member(const StringName &p_name, const DataType &
 		index = data->member_indices[p_name];
 	} else {
 		index = data->members.size();
-		data->members.push_back(Symbol{ p_name, p_datatype });
+		data->members.push_back(Symbol(p_name, p_datatype));
 		data->member_indices[p_name] = index;
 	}
 
@@ -567,7 +567,7 @@ uint32_t CFG::_add_stack_cell(const StringName &p_name, const DataType &p_dataty
 	const uint32_t address_index = stack_cells.size();
 	const uint32_t ssa_index = stack_cell_indices[p_name].size();
 
-	stack_cells.push_back(StackCell{ p_name, ssa_index, p_datatype });
+	stack_cells.push_back(StackCell(p_name, ssa_index, p_datatype));
 	stack_cell_indices[p_name].push_back(address_index);
 
 	return address_index;

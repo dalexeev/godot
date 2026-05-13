@@ -42,43 +42,96 @@
 
 namespace gdscript {
 
-// Expected:
-// <godot binary> --test gdscript3-<command> --help
-// <godot binary> --test gdscript3-<command> [<options>] <script path>
-static bool parse_test_cmdline_args(String &r_path, String &r_source, Vector<String> &r_options, bool &r_print_help) {
-	const List<String> args = OS::get_singleton()->get_cmdline_args();
+class TestCommandParser {
+	String command;
+	HashMap<String, String> options;
+	int max_option_length = 0;
 
-	if (args.size() < 4) {
-		return false;
+	String path;
+	String source;
+	HashSet<String> provided_options;
+
+	void print_invalid_command() const {
+		print_line(vformat(R"(Invalid command. Expected "<godot> --test %s [<options>] <script path>".)", command));
+		print_line(vformat(R"(Enter "<godot> --test %s --help" for assistance.)", command));
 	}
 
-	Vector<String> options;
-	{
-		int i = 0;
-		for (const String &arg : args) {
-			if (i >= 3) {
-				if (i == 3 && arg == "--help") {
-					r_print_help = true;
-					return true;
-				}
-				if (i >= args.size() - 1) {
-					break;
-				}
-				options.push_back(arg);
+	void print_help() const {
+		print_line(vformat(R"(Usage: "<godot> --test %s [<options>] <script path>".)", command));
+		print_line("\nOptions:\n");
+		if (options.is_empty()) {
+			print_line("  (None.)");
+		} else {
+			const String format = vformat("  %%-%ds | %%s", max_option_length);
+			for (const KeyValue<String, String> &kv : options) {
+				print_line(vformat(format, kv.key, kv.value));
 			}
-			i++;
 		}
 	}
 
-	const String path = args.back()->get();
-	const Ref<FileAccess> file = FileAccess::open(path, FileAccess::READ);
-	ERR_FAIL_COND_V_MSG(file.is_null(), false, vformat(R"(Could not open file "%s".)", path));
+public:
+	void add_option(const String &p_option, const String &p_description) {
+		ERR_FAIL_COND(p_option.is_empty());
+		ERR_FAIL_COND(options.has(p_option));
+		ERR_FAIL_COND(p_description.is_empty());
 
-	r_path = file->get_path_absolute();
-	r_source = file->get_as_text();
-	r_options = options;
-	return true;
-}
+		options[p_option] = p_description;
+		max_option_length = MAX(max_option_length, p_option.length());
+	}
+
+	// Expected:
+	// <godot> --test <command> --help
+	// <godot> --test <command> [<options>] <script path>
+	bool parse_cmdline_args() {
+		const List<String> args = OS::get_singleton()->get_cmdline_args();
+
+		if (args.size() < 4) {
+			print_invalid_command();
+			return false;
+		}
+
+		int arg_index = 0;
+		for (const String &arg : args) {
+			if (arg_index == 2) {
+				ERR_FAIL_COND_V(arg != command, false);
+			}
+			if (arg_index == 3 && arg == "--help") {
+				print_help();
+				return false;
+			}
+			if (arg_index >= args.size() - 1) {
+				break;
+			}
+
+			if (arg_index >= 3) {
+				if (!options.has(arg) || provided_options.has(arg)) {
+					print_invalid_command();
+					return false;
+				}
+
+				provided_options.insert(arg);
+			}
+
+			arg_index++;
+		}
+
+		const String raw_path = args.back()->get();
+		const Ref<FileAccess> file = FileAccess::open(raw_path, FileAccess::READ);
+		ERR_FAIL_COND_V_MSG(file.is_null(), false, vformat(R"(Could not open file "%s".)", raw_path));
+
+		path = file->get_path_absolute();
+		source = file->get_as_text();
+
+		return true;
+	}
+
+	_FORCE_INLINE_ const String &get_path() const { return path; }
+	_FORCE_INLINE_ const String &get_source() const { return source; }
+	_FORCE_INLINE_ bool has_provided_option(const String &p_option) const { return provided_options.has(p_option); }
+
+	TestCommandParser(const String &p_command) :
+			command(p_command) {}
+};
 
 static void print_dignostics(
 		const DiagnosticList &p_diagnostic_list,
@@ -116,169 +169,85 @@ static void print_dignostics(
 }
 
 void test_command_tokenizer() {
-	String path;
-	String source;
-	Vector<String> options;
-	bool print_help = false;
-	if (!parse_test_cmdline_args(path, source, options, print_help)) {
-		print_line(R"(Invalid command. Expected "<godot binary> --test gdscript3-tokenizer [<options>] <script path>".)");
-		print_line(R"(Enter "<godot binary> --test gdscript3-tokenizer --help" for assistance.)");
+	TestCommandParser tcp("gdscript3-tokenizer");
+	if (!tcp.parse_cmdline_args()) {
 		return;
 	}
 
-	if (print_help) {
-		print_line(R"(Expected format: "<godot binary> --test gdscript3-tokenizer [<options>] <script path>".)");
-		print_line("\nOptions:\n");
-		print_line("  --interactive    | Activate interactive mode.");
-		print_line("  --print-comments | Print comments as they are found in the source code.");
-		return;
-	}
-
+	const String &source = tcp.get_source();
 	const Vector<String> lines = source.split("\n");
-	const bool interactive = options.has("--interactive");
-	const bool print_comments = options.has("--print-comments");
-
-	if (interactive) {
-		print_line_rich(R"([color=blue]Interactive mode is active. Enter "h" for assistance.[/color])");
-	}
 
 	const String primary_separator = String::chr('=').repeat(80);
 	const String secondary_separator = String::chr('-').repeat(80);
 	const String indent = String::chr(' ').repeat(4);
 
 	Tokenizer tokenizer(source);
-	unsigned last_comment_count = 0;
-	int last_comment_line = 0;
 
 	Tokenizer::Token token;
 	do {
-		if (interactive) {
-			print_raw("\u001b[90m >>>>\u001b[39m ");
-			const String line = OS::get_singleton()->get_stdin_string().strip_edges();
-			if (line.is_empty()) {
-				// Scan next token.
-			} else {
-				if (line == "m") {
-					if (tokenizer.is_multiline_mode()) {
-						print_line_rich(indent, "[color=red]Multiline mode is already enabled.[/color]");
-					} else {
-						tokenizer.set_multiline_mode(true);
-						print_line_rich(indent, "[color=green]Multiline mode is enabled.[/color]");
-					}
-				} else if (line == "s") {
-					if (tokenizer.is_multiline_mode()) {
-						tokenizer.set_multiline_mode(false);
-						print_line_rich(indent, "[color=green]Multiline mode is disabled.[/color]");
-					} else {
-						print_line_rich(indent, "[color=red]Multiline mode is already disabled.[/color]");
-					}
-				} else if (line == "b+") {
-					tokenizer.push_expression_indented_block();
-					const int stack_size = tokenizer.get_expression_indented_block_depth();
-					print_line_rich(indent, vformat("[color=green]The stack size is now %d.[/color]", stack_size));
-				} else if (line == "b-") {
-					if (tokenizer.get_expression_indented_block_depth() > 0) {
-						tokenizer.pop_expression_indented_block();
-						const int stack_size = tokenizer.get_expression_indented_block_depth();
-						print_line_rich(indent, vformat("[color=green]The stack size is now %d.[/color]", stack_size));
-					} else {
-						print_line_rich(indent, "[color=red]The stack is empty.[/color]");
-					}
-				} else if (line == "h") {
-					print_line_rich(indent, "[color=blue]   | Scan next token.[/color]");
-					print_line_rich(indent, "[color=blue]m  | Enable multiline mode.[/color]");
-					print_line_rich(indent, "[color=blue]s  | Disable multiline mode.[/color]");
-					print_line_rich(indent, "[color=blue]b+ | Push indented block.[/color]");
-					print_line_rich(indent, "[color=blue]b- | Pop indented block.[/color]");
-					print_line_rich(indent, "[color=blue]h  | Print help information.[/color]");
-				} else {
-					print_line_rich(indent, R"([color=red]Invalid command. Enter "h" for assistance.[/color])");
-				}
-				continue;
-			}
-		}
-
 		token = tokenizer.scan();
-
-		const HashMap<int, Comment> &comments = tokenizer.get_comments();
-		if (print_comments && comments.size() != last_comment_count) {
-			for (const KeyValue<int, Comment> &kv : tokenizer.get_comments()) {
-				if (kv.key <= last_comment_line) {
-					continue;
-				}
-
-				print_line(primary_separator);
-				print_source_region(kv.value.source_region, lines);
-				print_line(vformat(" ===> Comment | is_inline = %s", kv.value.is_inline));
-
-				if (interactive) {
-					print_raw("\u001b[90mPress Enter...\u001b[39m");
-					(void)OS::get_singleton()->get_stdin_string();
-				}
-
-				last_comment_line = kv.key;
-			}
-			last_comment_count = comments.size();
-		}
 
 		print_line(primary_separator);
 		print_source_region(token.source_region, lines);
 
-		String token_info = " ===> " + token.get_name();
+		String token_info = " ===> " + token.get_raw_name();
 		switch (token.type) {
 			case Tokenizer::Token::Type::ANNOTATION:
 			case Tokenizer::Token::Type::IDENTIFIER:
 			case Tokenizer::Token::Type::LITERAL:
-			case Tokenizer::Token::Type::ERROR:
+			case Tokenizer::Token::Type::ERROR: {
 				token_info += "(" + token.data.get_construct_string() + ")";
-				break;
-			default:
-				break;
+			} break;
+			case Tokenizer::Token::Type::INDENTATION: {
+				const Tokenizer::Indentation indentation = Tokenizer::Indentation::from_variant(token.data);
+
+				String type;
+				switch (indentation.type) {
+					case Tokenizer::Indentation::Type::EMPTY:
+						type = "EMPTY";
+						break;
+					case Tokenizer::Indentation::Type::SPACES:
+						type = "SPACES";
+						break;
+					case Tokenizer::Indentation::Type::TABS:
+						type = "TABS";
+						break;
+					case Tokenizer::Indentation::Type::MIXED:
+						type = "MIXED";
+						break;
+				}
+
+				token_info += vformat("(type = %s, column_width = %d)", type, indentation.column_width);
+			} break;
+			default: {
+				if (unlikely(token.data.get_type() != Variant::NIL)) {
+					print_line_rich("[color=red] !!!> Invalid token data.[/color]");
+					token_info += "(" + token.data.get_construct_string() + ")";
+				}
+			} break;
 		}
-		token_info += vformat(" | is_inline = %s", token.is_inline);
 
 		print_line(token_info);
 
 		for (const Tokenizer::Token::InnerError &inner_error : token.inner_errors) {
-			if (interactive) {
-				print_raw("\u001b[90mPress Enter...\u001b[39m");
-				(void)OS::get_singleton()->get_stdin_string();
-			}
-
 			print_line(secondary_separator);
 			print_source_region(inner_error.source_region, lines);
 			print_line(vformat(" ---> InnerError: %s", inner_error.message));
 		}
-	} while (token.type != Tokenizer::Token::Type::EOF_);
-
-	if (!print_comments && !tokenizer.get_comments().is_empty()) {
-		print_line(String());
-		print_line_rich(vformat(
-				R"([color=blue]Found %d comment(s). Use "--print-comments" for details.[/color])",
-				tokenizer.get_comments().size()));
-	}
+	} while (token.type != Tokenizer::Token::Type::TK_EOF);
 }
 
 void test_command_parser() {
-	String path;
-	String source;
-	Vector<String> options;
-	bool print_help = false;
-	if (!parse_test_cmdline_args(path, source, options, print_help)) {
-		print_line(R"(Invalid command. Expected "<godot binary> --test gdscript3-parser [<options>] <script path>".)");
-		print_line(R"(Enter "<godot binary> --test gdscript3-parser --help" for assistance.)");
+	TestCommandParser tcp("gdscript3-parser");
+	tcp.add_option("--print-source-regions", "Print the source region of each node after the AST representation.");
+	if (!tcp.parse_cmdline_args()) {
 		return;
 	}
 
-	if (print_help) {
-		print_line(R"(Expected format: "<godot binary> --test gdscript3-parser [<options>] <script path>".)");
-		print_line("\nOptions:\n");
-		print_line("  --print-source-regions | Print the source region of each node after the AST representation.");
-		return;
-	}
-
+	const String &path = tcp.get_path();
+	const String &source = tcp.get_source();
 	const Vector<String> lines = source.split("\n");
-	const bool print_source_regions = options.has("--print-source-regions");
+	const bool print_source_regions = tcp.has_provided_option("--print-source-regions");
 
 	const String separator = String::chr('-').repeat(80);
 
@@ -338,25 +307,16 @@ void test_command_parser() {
 }
 
 void test_command_analyzer() {
-	String path;
-	String source;
-	Vector<String> options;
-	bool print_help = false;
-	if (!parse_test_cmdline_args(path, source, options, print_help)) {
-		print_line(R"(Invalid command. Expected "<godot binary> --test gdscript3-analyzer [<options>] <script path>".)");
-		print_line(R"(Enter "<godot binary> --test gdscript3-analyzer --help" for assistance.)");
+	TestCommandParser tcp("gdscript3-analyzer");
+	tcp.add_option("--print-extended-info", "Print extended information about each node.");
+	if (!tcp.parse_cmdline_args()) {
 		return;
 	}
 
-	if (print_help) {
-		print_line(R"(Expected format: "<godot binary> --test gdscript3-analyzer [<options>] <script path>".)");
-		print_line("\nOptions:\n");
-		print_line("  --print-extended-info | Print extended information about each node.");
-		return;
-	}
-
+	const String &path = tcp.get_path();
+	const String &source = tcp.get_source();
 	const Vector<String> lines = source.split("\n");
-	const bool print_extended_info = options.has("--print-extended-info");
+	const bool print_extended_info = tcp.has_provided_option("--print-extended-info");
 
 	const String separator = String::chr('-').repeat(80);
 
@@ -405,6 +365,9 @@ void test_command_analyzer() {
 				} else if (p_node->get_type() == AST::Node::Type::FOR) {
 					AST::ForNode *for_node = static_cast<AST::ForNode *>(p_node);
 					node_info += " | iterator_datatype = " + for_node->iterator_datatype.to_debug_string();
+				} else if (p_node->get_type() == AST::Node::Type::ENUM) {
+					AST::EnumNode *enum_node = static_cast<AST::EnumNode *>(p_node);
+					node_info += " | underlying_datatype = " + enum_node->underlying_datatype.to_debug_string();
 				}
 
 				print_line(separator);
